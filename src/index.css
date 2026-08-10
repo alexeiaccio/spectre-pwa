@@ -1,0 +1,26 @@
+@import "tailwindcss";
+
+@theme {
+  --color-surface-950: #0b1220;
+  --color-surface-900: #0f172a;
+  --color-surface-800: #1e293b;
+  --color-surface-700: #334155;
+  --color-teal-spectre: #3e8989;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", monospace;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-surface-900 text-slate-100 antialiased;
+  overscroll-behavior: none;
+  user-select: none;
+}
+
+input {
+  user-select: text;
+}
