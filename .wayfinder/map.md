@@ -22,15 +22,18 @@ A deliverable spec + working scaffold for **Spectre Pocket**: an installable, of
 
 <!-- one line per closed ticket -->
 
-- none yet
+- [T1 · Pass-key-to-vault-key unwrap mechanism](tickets/T1-passkey-to-vault-key.md) — Use WebAuthn **PRF extension** (H)MAC → HKDF → AES-GCM vault key; envelope-encrypt DEK under the passkey + a **typed recovery code**. Works offline on Chrome Android ≥130.
+- [T3 · Spectre algorithm port scope](tickets/T3-spectre-algorithm-port.md) — Port from **`spectre.app/web` `spectre-algorithm.js`** (android repo is old Java UI). Spectre ⇔ Master Password bit-identical, scrypt N=32768 r=8 p=2 dkLen=64, no HKDF, V0–V3 differ by length encoding. **60/60 official vectors verified**; use `@stablelib/scrypt`; default V3.
+- [T4 · Session and lock lifecycle](tickets/T4-session-lock-lifecycle.md) — Two gates: passkey → vault (identity list + site names), passphrase → scrypt master-key once per identity session as non-extractable CryptoKey. Launch = every foregrounding, 2-min grace from `hidden`, full re-auth on lock, enumerate wipe points; JS strings unwipable — hygiene not guarantee.
+- [T5 · Offline-first install + SW strategy](tickets/T5-offline-first-pwa.md) — Keep `generateSW`; switch to **`virtual:pwa-register`** (auto reload once on SW update). Re-serve dist/ never touches IndexedDB or passkeys. Bug: manifest references nonexistent `icons.svg` → fix before delivery.
 
 ## Not yet specified
 
-- Whether the vault stores per-identity *full name* as plaintext (needed for the identity picker before unlock) vs encrypted entirely.
-- Whether "locked" state should erase the vault key and derived material from memory (JS, so assume yes).
-- Which Spectre algorithm versions to support (V0–V3) — likely all four selectable, port from reference C.
+- **T2 gap**: vault/DEK envelope schema, recovery-code format, IndexedDB vs OPFS object layout, plaintext-at-rest fields for identity picker. → now ticketable (unblocked: T1 closed).
+- T6 visibility across tickets: UI decisions pending research on cancel; could be split into "identity picker" + "result/copy" + "navigation" grilling tickets once T2 schema lands.
 - Whether security-answer / login-name purposes are in scope for v1 UI or phase 2.
-- If passkey PRF (WebAuthn L3) is unsupported on the target device → fallback key-wrapping mechanism for the vault.
+- Recovery-code UX: when shown, printed, and whether passkey re-enrollment after loss uses it.
+- `navigator.storage.persist()` request timing (install vs first unlock).
 
 ## Out of scope
 
