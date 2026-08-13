@@ -24,3 +24,8 @@ body {
 input {
   user-select: text;
 }
+
+/* T6 thumb-first: minimum 44px touch targets on a small portrait screen. */
+@utility tap {
+  min-height: 2.75rem;
+}
