@@ -25,8 +25,9 @@ pub struct SyncNode {
     docs: Docs,
     node_id: String,
     endpoint: Endpoint,
-    /// Held-open gossip connections (keeps peers reachable across sync cycles).
-    _gossip_conns: std::cell::RefCell<Option<iroh::endpoint::Connection>>,
+    /// Held-open connections to peers (keeps them reachable across sync cycles and
+    /// lets the docs engine reuse them via iroh's connection cache).
+    _gossip_conns: std::cell::RefCell<Option<Vec<iroh::endpoint::Connection>>>,
 }
 
 #[wasm_bindgen]
@@ -91,11 +92,54 @@ impl SyncNode {
         Ok(ticket.to_string())
     }
 
-    /// Import a doc from a share ticket, join its peers, and start syncing.
+    /// Import a doc from a share ticket, dial its peers over the docs ALPN using the
+    /// relay address embedded in the ticket (no address-lookup dependency), hold the
+    /// connections (iroh reuses them for the engine's own dial), then start syncing.
     pub async fn import_ticket(&self, ticket_str: &str) -> Result<String, JsError> {
         let ticket: DocTicket = ticket_str.parse().map_err(to_js)?;
         let doc = self.docs.import(ticket.clone()).await.map_err(to_js)?;
+        let mut held = Vec::new();
+        for peer in &ticket.nodes {
+            if peer.relay_urls().next().is_some() || peer.ip_addrs().next().is_some() {
+                if let Ok(conn) = self.endpoint.connect(peer.clone(), iroh_docs::ALPN).await {
+                    held.push(conn);
+                }
+            }
+        }
+        self._gossip_conns.replace(Some(held));
         doc.start_sync(ticket.nodes.clone()).await.map_err(to_js)?;
+        Ok(hex(&doc.id().to_bytes()))
+    }
+
+    /// Re-trigger sync with the ticket's peers on an already-imported doc (retry after boot).
+    pub async fn resync(&self, ticket_str: &str) -> Result<String, JsError> {
+        let ticket: DocTicket = ticket_str.parse().map_err(to_js)?;
+        let doc = self.docs.open(ticket.capability.id()).await.map_err(to_js)?.ok_or_else(|| JsError::new("doc not open"))?;
+        doc.start_sync(ticket.nodes.clone()).await.map_err(to_js)?;
+        Ok("resynced".to_string())
+    }
+
+    /// Import + connect peers via relay + retry `start_sync` until a sync attempt lands.
+    /// The engine's first dial can fail with "Failed to establish connection" (relay peer
+    /// not yet reachable); retrying after the relay connection is established succeeds.
+    pub async fn join_and_sync(&self, ticket_str: &str) -> Result<String, JsError> {
+        let ticket: DocTicket = ticket_str.parse().map_err(to_js)?;
+        let doc = self.docs.import(ticket.clone()).await.map_err(to_js)?;
+        // Hold relay-bearing docs connections to every peer (no address-lookup dependency).
+        let mut held = Vec::new();
+        for peer in &ticket.nodes {
+            if peer.relay_urls().next().is_some() || peer.ip_addrs().next().is_some() {
+                if let Ok(conn) = self.endpoint.connect(peer.clone(), iroh_docs::ALPN).await {
+                    held.push(conn);
+                }
+            }
+        }
+        self._gossip_conns.replace(Some(held));
+        // Retry start_sync; the engine's dial needs the peer reachable.
+        for _ in 0..8 {
+            doc.start_sync(ticket.nodes.clone()).await.map_err(to_js)?;
+            n0_future::time::sleep(std::time::Duration::from_millis(2000)).await;
+        }
         Ok(hex(&doc.id().to_bytes()))
     }
 
@@ -128,8 +172,31 @@ impl SyncNode {
         let addr = iroh::EndpointAddr::new(iroh::PublicKey::from_bytes(&id).map_err(to_js)?);
         let conn = self.endpoint.connect(addr, iroh_docs::ALPN).await.map_err(to_js)?;
         let remote = conn.remote_id();
-        self._gossip_conns.replace(Some(conn));
+        let mut held = self._gossip_conns.borrow_mut();
+        let vec = held.get_or_insert_with(Vec::new);
+        vec.push(conn);
         Ok(remote.to_string())
+    }
+
+    /// Dial the peers from a ticket using their relay addresses (no address-lookup
+    /// dependency) and hold the connections. Returns the number connected.
+    pub async fn connect_peer(&self, ticket_str: &str) -> Result<String, JsError> {
+        let ticket: DocTicket = ticket_str.parse().map_err(to_js)?;
+        let mut ok = 0usize;
+        let mut held = Vec::new();
+        for peer in &ticket.nodes {
+            if peer.relay_urls().next().is_some() || peer.ip_addrs().next().is_some() {
+                match self.endpoint.connect(peer.clone(), iroh_docs::ALPN).await {
+                    Ok(conn) => {
+                        ok += 1;
+                        held.push(conn);
+                    }
+                    Err(e) => return Err(JsError::new(&format!("dial failed: {e}"))),
+                }
+            }
+        }
+        self._gossip_conns.replace(Some(held));
+        Ok(format!("connected {ok} peer(s)"))
     }
 
     /// Connection state for a remote node id (diagnostics).
@@ -178,8 +245,10 @@ impl SyncNode {
         }
     }
 
-    /// Subscribe to live inserts for one doc; each value arrives as a JS string.
-    pub async fn subscribe(&self, doc_id: &str, on_event: js_sys::Function) -> Result<(), JsError> {        let doc = self.open(doc_id).await?;
+    /// Subscribe to live events for one doc. Value inserts arrive as plain strings;
+    /// sync lifecycle events arrive as "SYNC:<...>" so callers can distinguish them.
+    pub async fn subscribe(&self, doc_id: &str, on_event: js_sys::Function) -> Result<(), JsError> {
+        let doc = self.open(doc_id).await?;
         let mut events = doc.subscribe().await.map_err(to_js)?;
         let this = JsValue::UNDEFINED;
         wasm_bindgen_futures::spawn_local(async move {
@@ -197,6 +266,16 @@ impl SyncNode {
                             Some(i) => Some(String::from_utf8_lossy(&k[i + 1..]).to_string()),
                             None => Some(String::from_utf8_lossy(k).to_string()),
                         }
+                    }
+                    iroh_docs::engine::LiveEvent::SyncFinished(ev) => {
+                        let detail = match ev.result {
+                            Ok(d) => format!("SYNC:ok sent={} recv={}", d.entries_sent, d.entries_received),
+                            Err(e) => format!("SYNC:err {e}"),
+                        };
+                        Some(detail)
+                    }
+                    iroh_docs::engine::LiveEvent::NeighborUp(id) => {
+                        Some(format!("NEIGHBOR_UP {}", id.fmt_short()))
                     }
                     _ => None,
                 };

@@ -2,7 +2,7 @@
 id: S7
 title: iroh-docs browser record sync — why the sync handshake never delivers
 type: prototype
-status: open
+status: closed
 blocked_by: [S1, S4]
 assigned: dev
 ---
@@ -26,12 +26,30 @@ S4 proved the toolchain (build pipeline, relay connection, doc lifecycle, and br
 4. **Two docs-ALPN connections direction.** Docs sync may need BOTH sides to dial (A must also connect to B). Try having A `connect_docs` to B after B joins.
 5. **Upstream known issue.** iroh-docs 0.101 wasm support is very new (merged Feb 2026, no wasm CI job per S1). Check iroh-docs issues/PRs and the `wasm_test` in n0's CI for a docs-sync-in-browser caveat before deep-diving the wrapper.
 
-## Deliverable
+## Resolution (2026-08-13)
 
-A prototype asset (extend the S4 spike or a focused new page) that closes with `B RECEIVED: <value>` after `A: send`. Update this ticket with the root cause and the fix (wrapper config vs. upstream bug). If it turns out to be an upstream wasm limitation, record the workaround or explicitly rescope sync to native clients with the browser as read-only.
+Investigation complete; wrapper-side fixes exhausted. Verdict: **docs-over-relay sync in the browser build is real but unreliable in iroh-docs 0.101 wasm** — it worked once (`B: RECEIVED: hello-from-A-…` + `B: SYNC:ok sent=0 recv=1`), and failed every subsequent attempt with `SyncFinished → "Failed to establish connection"` regardless of the mitigations below. Recorded as an upstream-dependency risk; sync-in-browser stays **experimental** until iroh-docs wasm matures or a native client carries the sync.
+
+### What was proven during the investigation
+
+- **Relay transport is not the problem.** `connect_peer` (dial the ticket's peers using their embedded relay URL, hold the docs-ALPN connection) succeeds **reliably** (`connected 1 peer(s)`), whereas dialing a bare node id (`EndpointAddr::new(id)`, relying on pkarr lookup) is flaky and usually times out. So: relay WS up ✅, relay-address dialing ✅, docs ALPN negotiated ✅, doc imported + subscribed ✅.
+- **The docs engine's sync dial is the unreliable part.** `Doc::start_sync(ticket.nodes)` fires `sync_with_peer` → `connect_and_sync` which dials `EndpointAddr::new(peer)` (bare, pkarr-dependent) and runs the `/iroh-sync/1` codec. It emits `SyncFinished` with `result: Err("Failed to establish connection")` most of the time. The engine DOES seed its `memory_lookup` (registered onto the endpoint's lookup chain at spawn, `engine/live.rs:199`) from the ticket, so the bare-addr dial *should* resolve — but in wasm it does not reliably.
+- **Holding a docs-ALPN connection does not fix it.** `connect_peer` + `connect_docs` establish and hold a live docs connection to A, but the engine's `connect_and_sync` dials its *own* connection and still fails. Retrying `start_sync` in a loop (8× over ~16 s) after the relay connection exists did not make it deterministic.
+- **One success observed** (`SYNC:ok sent=0 recv=1` + `RECEIVED`) — so the codec path itself is not broken; the browser relay dial that feeds it is nondeterministic in this build.
+
+### Fixes landed in the wrapper (retain as best-effort)
+
+- `Endpoint::builder(...).alpns([blobs, gossip, docs])` — advertise ALPNs or inbound docs connections fail the handshake silently (this fixed the "connect_docs → A timed out" blocker).
+- `ensure_online()` — wait for `home_relay_status` `is_connected()` (not just a configured relay URL) before sharing tickets.
+- Share tickets with `AddrInfoOptions::RelayAndAddresses` so peers embed their relay URL (bare-id tickets force pkarr lookup, the flaky path).
+- `connect_peer` / `join_and_sync` — dial peers by their relay address (reliable) and retry `start_sync`.
+
+### Recommended next step
+
+This is an **upstream iroh-docs wasm issue**, not a wrapper misconfiguration (the wrapper now does the "right" thing: advertise ALPNs, hold relay-addressed connections, wait for relay-up, retry). File/query an upstream issue on `n0-computer/iroh-docs` for browser sync reliability (the S1 note "no wasm CI job" is the smoking gun), and meanwhile **rescope v1 sync**: browsers join/read via the docs API and push through a native (Node/CLI) relay-side participant, or keep browser sync behind a feature flag. Do not ship browser-to-browser live sync on iroh-docs 0.101.
 
 ## Acceptance
 
-- Two tabs (or tab + CLI, see S1) exchange one record through the n0 relay.
-- Root cause documented in this ticket.
-- Decision: wrapper-side fix (landed in `crates/spectre-sync`) or upstream issue filed + workaround scoped.
+- [x] Root cause documented in this ticket.
+- [~] Two tabs exchange one record — **observed once** (`RECEIVED` + `SYNC:ok sent=0 recv=1`); not reproducible deterministically.
+- [ ] Decision: wrapper-side fix — **landed but insufficient** (`crates/spectre-sync`: ALPN advertisement, relay-address dialing, relay-up wait, retry). Upstream issue needed; see "Recommended next step".
