@@ -1,0 +1,16 @@
+# Spectre Pocket — Cloudflare Worker deploy.
+# The Worker re-serves the built dist/ (assets binding) and nothing else:
+# vault (IndexedDB) and passkeys stay in the browser, offline-only after install.
+name = "spectre-pocket"
+main = "src/worker.ts"
+compatibility_date = "2024-11-01"
+
+# Keep the workers.dev hostname alongside the custom domain.
+workers_dev = true
+
+# Custom domain on the account's accio.blue zone.
+routes = [
+  { pattern = "spectre.accio.blue", custom_domain = true },
+]
+
+assets = { directory = "./dist", binding = "ASSETS", not_found_handling = "single-page-application" }
