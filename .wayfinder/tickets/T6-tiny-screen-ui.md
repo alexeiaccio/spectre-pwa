@@ -2,7 +2,7 @@
 id: T6
 title: Tiny-screen UI model for identities and derived results
 type: grilling
-status: open
+status: resolved
 blocked_by: []
 assigned:
 ---
@@ -18,4 +18,14 @@ Ikko Mind One == small portrait screen, thumb-first, no desktop aesthetics. Defi
 
 ## Resolution
 
-(pending)
+Closed 2026-08-11 · superseded decisions from T2/T4 (plaintext identity names dropped; lock screen is passkey/recovery only) folded in. Implemented in `src/App.tsx` + `src/index.css`:
+
+- **Identity picker lives after passkey unlock**, not on the lock screen (T2: nothing user-visible plaintext at rest). Unlocked → identity list → per-identity site list. This is the v1 navigation shape.
+- **Navigation depth = 2 levels max**: `identities → sites`. Passphrase entry sits on the identity screen (not its own level); the "← identities" back button closes the drill-down.
+- **Reveal-on-tap, then tap-to-copy.** Tapping a site row derives and reveals the value *inline* in that row (no separate panel). Tapping the revealed value copies it and flashes "copied". The clipboard self-clears after **30s** (`src/lib/lifecycle.ts`). No show-as-you-type — nothing is stored, so there is nothing to type ahead.
+- **Touch targets:** all primary buttons and inputs ≥ **44px** via a `tap` Tailwind utility (`min-height: 2.75rem`) — thumb-first, no hover dependence for action.
+- **Theme:** dark-only (`surface-900`), spectre teal accent, `user-select: none` except inputs; mono font for derived values. Font scale stays default (`text-sm`) — small screens need density, not magnification.
+- **Deliberately omitted in v1:** animations, images/illustration, hover-only affordances, desktop layouts, multi-column, context menus (long-press). Every interactive element is a full-width tap target.
+- **Site quick-add** is an inline form on the sites screen (name + purpose + template + optional security question), matching "site name quick-add" from the question.
+
+Status → **resolved**.

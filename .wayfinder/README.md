@@ -2,10 +2,17 @@
 
 This repo uses the **local-markdown** issue tracker (no external tracker configured).
 
+## Efforts
+
+Each effort gets its own self-contained directory under `.wayfinder/` (map + `tickets/` + `research/` + `prototypes/`). The v1 effort lives at the root (`.wayfinder/map.md`); later efforts live in their own dirs.
+
+- **v1 — Spectre Pocket**: `.wayfinder/map.md` (delivered).
+- **Sync — Spectre Pocket Sync**: `.wayfinder/sync/map.md` (in progress).
+
 ## Where things live
 
-- **The map**: `.wayfinder/map.md` — single source of the effort's destination + index of decisions.
-- **Tickets**: `.wayfinder/tickets/NNN-slug.md` — one file per decision ticket, child of the map.
+- **The map**: `.wayfinder/<effort>/map.md` (or `.wayfinder/map.md` for v1) — single source of the effort's destination + index of decisions.
+- **Tickets**: `.wayfinder/<effort>/tickets/NNN-slug.md` — one file per decision ticket, child of the map.
 
 ## Ticket file shape
 
