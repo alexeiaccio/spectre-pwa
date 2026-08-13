@@ -25,3 +25,7 @@ dist-ssr
 
 # Playwright MCP artifacts
 .playwright-mcp/
+
+# Rust wasm build output
+crates/spectre-sync/target/
+crates/spectre-sync/wasm-out/

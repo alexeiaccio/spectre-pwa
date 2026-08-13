@@ -2,8 +2,17 @@ import { defineConfig } from 'vite'
 import solid from 'vite-plugin-solid'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
+import { resolve } from 'node:path'
 
 export default defineConfig({
+  build: {
+    rollupOptions: {
+      input: {
+        main: resolve(__dirname, 'index.html'),
+        spike: resolve(__dirname, 'spike.html'),
+      },
+    },
+  },
   plugins: [
     solid(),
     tailwindcss(),
