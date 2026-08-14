@@ -1,12 +1,13 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
 @theme {
-  --color-surface-950: #0b1220;
-  --color-surface-900: #0f172a;
-  --color-surface-800: #1e293b;
-  --color-surface-700: #334155;
-  --color-teal-spectre: #3e8989;
-  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", monospace;
+  --color-surface-950: #000000;
+  --color-surface-900: #0a0a0a;
+  --color-surface-800: #1a1a1a;
+  --color-surface-700: #2e2e2e;
+  --color-surface-600: #3d3d3d;
+  --color-teal-spectre: #ffffff;
+  --font-mono: ui-monospace, 'SF Mono', 'Cascadia Mono', monospace;
 }
 
 html,
