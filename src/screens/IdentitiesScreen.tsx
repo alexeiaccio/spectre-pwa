@@ -1,9 +1,32 @@
 import { createSignal, For, Show } from 'solid-js'
 import {
+  Content as SelectContent,
+  Item as SelectItem,
+  ItemLabel as SelectItemLabel,
+  Listbox as SelectListbox,
+  Portal as SelectPortal,
+  Root as SelectRoot,
+  Trigger as SelectTrigger,
+  Value as SelectValue,
+} from '@kobalte/core/select'
+import {
   Input as TextFieldInput,
   Root as TextFieldRoot,
 } from '@kobalte/core/text-field'
 import type { Identity, Prefs, Vault } from '../lib/vault/schema.ts'
+
+interface AutoLockOption {
+  value: number
+  label: string
+}
+
+const AUTO_LOCK_OPTIONS: AutoLockOption[] = [
+  { value: 1, label: '1 minute' },
+  { value: 2, label: '2 minutes' },
+  { value: 5, label: '5 minutes' },
+  { value: 15, label: '15 minutes' },
+  { value: 60, label: '1 hour' },
+]
 
 export default function IdentitiesScreen(props: {
   vault: Vault
@@ -144,19 +167,32 @@ export default function IdentitiesScreen(props: {
       </div>
       <div class="flex flex-col gap-2 rounded border border-dashed border-surface-700 p-3">
         <p class="text-sm text-slate-500">Auto-lock after hiding the app:</p>
-        <select
-          class="tap rounded border border-surface-700 bg-surface-800 px-2 py-1 text-sm text-slate-100"
-          value={props.prefs().autoLockMinutes}
-          onChange={(e) =>
-            props.onSetAutoLock(Number((e.target as HTMLSelectElement).value))
-          }
+        <SelectRoot<AutoLockOption>
+          options={AUTO_LOCK_OPTIONS}
+          optionValue="value"
+          optionTextValue="label"
+          value={AUTO_LOCK_OPTIONS.find((o) => o.value === props.prefs().autoLockMinutes) ?? AUTO_LOCK_OPTIONS[0]}
+          onChange={(opt) => {
+            if (opt) props.onSetAutoLock(opt.value)
+          }}
+          itemComponent={(p) => (
+            <SelectItem item={p.item} class="tap flex items-center justify-between gap-2 px-3 py-2 text-sm text-slate-100 data-[highlighted]:bg-surface-700 data-[selected]:text-black">
+              <SelectItemLabel>{p.item.rawValue.label}</SelectItemLabel>
+            </SelectItem>
+          )}
         >
-          <option value={1}>1 minute</option>
-          <option value={2}>2 minutes</option>
-          <option value={5}>5 minutes</option>
-          <option value={15}>15 minutes</option>
-          <option value={60}>1 hour</option>
-        </select>
+          <SelectTrigger class="tap flex w-full items-center justify-between rounded border border-surface-700 bg-surface-800 px-2 py-1 text-sm text-slate-100">
+            <SelectValue<AutoLockOption>>
+              {(state) => state.selectedOption()?.label ?? '…'}
+            </SelectValue>
+            <span class="text-xs text-slate-500">▾</span>
+          </SelectTrigger>
+          <SelectPortal>
+            <SelectContent class="z-10 min-w-[12rem] overflow-hidden rounded border border-surface-700 bg-surface-800 p-1 shadow-lg">
+              <SelectListbox />
+            </SelectContent>
+          </SelectPortal>
+        </SelectRoot>
       </div>
       <div class="flex flex-col gap-2 rounded border border-dashed border-surface-700 p-3">
         <p class="text-sm text-slate-500">

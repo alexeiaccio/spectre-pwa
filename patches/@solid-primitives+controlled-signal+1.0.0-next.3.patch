@@ -1,0 +1,30 @@
+diff --git a/node_modules/@solid-primitives/controlled-signal/dist/index.js b/node_modules/@solid-primitives/controlled-signal/dist/index.js
+index c75ebc8..e964e31 100644
+--- a/node_modules/@solid-primitives/controlled-signal/dist/index.js
++++ b/node_modules/@solid-primitives/controlled-signal/dist/index.js
+@@ -18,14 +18,17 @@ function createControllableSignal(props) {
+ 		return v !== void 0 ? v : untrack(() => props.defaultValue?.());
+ 	}, { ownedWrite: true });
+ 	const setValue = (next) => {
+-		untrack(() => {
+-			const current = value();
+-			const nextValue = accessWith(next, current);
+-			if (!Object.is(nextValue, current)) {
+-				if (props.value?.() === void 0) _setValue(nextValue);
+-				props.onChange?.(nextValue);
+-			}
+-		});
++		// PATCH (spectre-pwa): Solid 2 rc.0-compatible. The published next.3 wraps the
++		// write in `untrack()`, which under Solid 2 rc.0 strict mode can drop writes from
++		// a non-owner context — freezing Kobalte's disclosure open state (popovers never
++		// mount). Read untracked (so controlled props don't subscribe) but WRITE outside
++		// untrack: event handlers are already untracked, so the write is safe and lands.
++		const current = untrack(value);
++		const nextValue = accessWith(next, current);
++		if (!Object.is(nextValue, current)) {
++			if (untrack(() => props.value?.()) === void 0) _setValue(nextValue);
++			props.onChange?.(nextValue);
++		}
+ 	};
+ 	return [value, setValue];
+ }
