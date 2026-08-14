@@ -30,12 +30,17 @@ Working peer-to-peer vault sync across multiple installs of Spectre Pocket: iden
 
 - [S1 · iroh-docs in the browser — wasm feasibility](tickets/S1-iroh-docs-wasm.md) — Stack compiles to wasm (iroh + iroh-docs, Feb 2026), but the browser docs store is **memory-only** (no IndexedDB) and there is no wasm NPM package → we must build our own wrapper + an IndexedDB persistence layer; ticket/join primitive, per-key LWW, relay WebSocket E2E, and configurable n0 relay all check out.
 - [S2 · Sync record schema and merge rules](tickets/S2-sync-record-schema.md) — Doc keys = **v1 identity uuids**; **one record per identity, ciphertext under the last writer's DEK** (rewrite only on content change — no ping-pong); **one envelope record per device** (device list is implicit); whole-identity LWW **silent**; deletes = key tombstone (identity) / record rewrite (site); device removal = stop syncing, records stay readable via envelope + recovery code.
+- [S3 · Per-device DEK re-encryption and unlock protocol](tickets/S3-per-device-dek-reencrypt.md) — Recovery code is **vault-wide**; read/merge = unwrap writer's DEK via code, decrypt, re-encrypt under local DEK only on content change; **random IV per write**; no cross-record index (each record atomic, partial sync is fine); **two-phase DEK rotation** (both wraps present → re-encrypt own records → drop old wrap), rotates **this device's** records only; master secret moves between devices encrypted only; Write ticket can clobber records (no revocation) — accepted.
+- [S5 · Pairing and first-run UX on tiny screens](tickets/S5-pairing-ux.md) — First-run: **Create vault primary + "join it" link** (no chooser); **existing vaults can join too** — B adopts A's code (re-wraps DEK-B under A's code, old code dies); identities merge **by v1 uuid, LWW resolves**; **code prompted after sync, verified** by unwrapping host envelope, then passkey enrollment; pairing lives in a **"Sync with another device" identity-picker section** (QR = DocTicket + copy-string fallback); trust = Write-ticket clobber, accepted.
+- [S6 · Vault-store migration to iroh-docs](tickets/S6-vault-store-migration.md) — **In-place migration at first unlock after upgrade** (blob → per-identity records under A's DEK); durable mirror in the **same DB bumped to v3** (`records`/`node`/per-device `envelope`; single-blob `vault` dropped); **all prefs stay local**; migrated DEK = A's DEK, re-enroll = normal S3 two-phase rotation, no legacy path.
 
 ## Not yet specified
 
-- Relay operations / self-host swap path (config surface known from S1; ops decisions still open).
-- Sync status UX (last-synced at, pending changes, relay reachability).
-- prefs (theme, autoLockMinutes) — synced or stay local (sharpens in S6).
+- Sync status UX (last-synced at, pending changes, relay reachability) — depends on the S7 upstream question (browser sync reliability) before it's sharp enough to build.
+
+## Decisions so far (2026-08-14)
+
+- **Relay ops / self-host swap — decided: keep the n0 public relay.** No self-host path planned; `RelayMode::Custom` remains as the config surface (S1) if it's ever needed, but it is not a roadmap item.
 
 ## Out of scope
 
