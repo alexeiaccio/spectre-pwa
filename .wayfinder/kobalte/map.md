@@ -26,7 +26,7 @@ Replace the app's native form controls with **Kobalte** (`@kobalte/core` Solid 2
 ## Tickets
 
 - [K1 · Auto-lock selector via Kobalte Select](tickets/K1.md) — **done** (unblocked by the controlled-signal patch): open/select/close/persist verified.
-- [K2 · Site form selects via Kobalte Select](tickets/K2.md) — **now unblocked** (same patch fixes the Select); purpose/template selects in SiteFields are the next target.
+- [K2 · Site form selects via Kobalte Select](tickets/K2.md) — **done**: purpose/template selects via shared MiniSelect; purpose auto-bumps template; verified open/select/persist in the add-site flow.
 - [K3 · Text inputs via Kobalte TextField](tickets/K3.md) — **done**: site name, security answer, full name, passphrase, recovery codes all on TextField.
 - [K4 · Spectre counter via Kobalte NumberField](tickets/K4.md) — **done** (counter in SiteFields).
 
