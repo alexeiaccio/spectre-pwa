@@ -1,5 +1,9 @@
 import { createSignal, Show } from 'solid-js'
-import { Effect } from 'effect'
+import { Clock, Effect } from 'effect'
+import {
+  Input as TextFieldInput,
+  Root as TextFieldRoot,
+} from '@kobalte/core/text-field'
 import {
   SYNC_EXPERIMENTAL,
   SyncUnavailableError,
@@ -25,19 +29,27 @@ import type { VaultStatus } from '../lib/vault/useVault.ts'
 
 type JoinStep = 'invite' | 'syncing' | 'recovery' | 'enrolling'
 
-const waitForValue = async (
+/**
+ * Poll `fn` until it returns a value, the Effect `Clock` passes the deadline,
+ * or the polling interval elapses. Runs on Effect's clock so it is testable and
+ * free of raw `Date.now`/`setTimeout` timers.
+ */
+const waitForValue = (
   fn: () => Promise<string | null>,
   timeoutMs: number,
   intervalMs = 1500,
-): Promise<string | null> => {
-  const deadline = Date.now() + timeoutMs
-  while (Date.now() < deadline) {
-    const v = await fn()
-    if (v) return v
-    await new Promise((r) => setTimeout(r, intervalMs))
-  }
-  return null
-}
+): Promise<string | null> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const end = (yield* Clock.currentTimeMillis) + timeoutMs
+      while (true) {
+        const v = yield* Effect.tryPromise(fn)
+        if (v) return v
+        if ((yield* Clock.currentTimeMillis) >= end) return null
+        yield* Effect.sleep(intervalMs)
+      }
+    }),
+  )
 
 export default function JoinScreen(props: {
   vaultStatus: () => VaultStatus
@@ -77,25 +89,28 @@ export default function JoinScreen(props: {
         45_000,
       )
       if (!hostStr)
-        throw new SyncUnavailableError(
-          'no data from the host yet — is the other device online and did it share an invitation? (experimental sync)',
-        )
+        throw new SyncUnavailableError({
+          message:
+            'no data from the host yet — is the other device online and did it share an invitation? (experimental sync)',
+        })
       const host = decodeHostDoc(hostStr)
       const envStr = await waitForValue(
         () => adapter.get(docId, envelopeKey(host.deviceId)),
         15_000,
       )
       if (!envStr)
-        throw new SyncUnavailableError(
-          'host envelope not found (experimental sync)',
-        )
+        throw new SyncUnavailableError({
+          message: 'host envelope not found (experimental sync)',
+        })
       hostEnvelope = decodeEnvelopeDoc(envStr)
       for (const id of host.identityIds) {
         const recStr = await adapter.get(docId, id)
         if (recStr) hostRecords.set(id, decodeRecordDoc(recStr))
       }
       if (hostRecords.size === 0)
-        throw new SyncUnavailableError('no identity records from the host yet')
+        throw new SyncUnavailableError({
+          message: 'no identity records from the host yet',
+        })
       setStep('recovery')
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -239,13 +254,15 @@ export default function JoinScreen(props: {
           This vault is passphrase-locked. Enter the recovery code from the
           other device (verified against the host's envelope):
         </p>
-        <input
-          class="tap rounded border border-surface-700 bg-surface-800 px-2 py-1 text-sm text-slate-100"
-          value={code()}
-          onInput={(e) => setCode((e.target as HTMLInputElement).value)}
-          placeholder="recovery code"
-          type="password"
-        />
+        <TextFieldRoot>
+          <TextFieldInput
+            class="tap rounded border border-surface-700 bg-surface-800 px-2 py-1 text-sm text-slate-100"
+            value={code()}
+            onInput={(e) => setCode((e.target as HTMLInputElement).value)}
+            placeholder="recovery code"
+            type="password"
+          />
+        </TextFieldRoot>
         <button
           class="tap rounded bg-teal-spectre px-3 py-2 text-sm font-medium text-black disabled:opacity-40"
           disabled={code().length < 8}

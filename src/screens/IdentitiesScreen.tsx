@@ -1,4 +1,8 @@
 import { createSignal, For, Show } from 'solid-js'
+import {
+  Input as TextFieldInput,
+  Root as TextFieldRoot,
+} from '@kobalte/core/text-field'
 import type { Identity, Prefs, Vault } from '../lib/vault/schema.ts'
 
 export default function IdentitiesScreen(props: {
@@ -74,29 +78,33 @@ export default function IdentitiesScreen(props: {
         <p class="text-sm text-slate-500">
           Add an identity (passphrase is your Spectre secret):
         </p>
-        <input
-          class="tap rounded border border-surface-700 bg-surface-800 px-2 py-1 text-sm text-slate-100"
-          value={newIdentity().fullName}
-          onInput={(e) =>
-            setNewIdentity((n) => ({
-              ...n,
-              fullName: (e.target as HTMLInputElement).value,
-            }))
-          }
-          placeholder="full name"
-        />
-        <input
-          class="tap rounded border border-surface-700 bg-surface-800 px-2 py-1 text-sm text-slate-100"
-          value={newIdentity().passphrase}
-          onInput={(e) =>
-            setNewIdentity((n) => ({
-              ...n,
-              passphrase: (e.target as HTMLInputElement).value,
-            }))
-          }
-          placeholder="passphrase (min 8)"
-          type="password"
-        />
+        <TextFieldRoot>
+          <TextFieldInput
+            class="tap rounded border border-surface-700 bg-surface-800 px-2 py-1 text-sm text-slate-100"
+            value={newIdentity().fullName}
+            onInput={(e) =>
+              setNewIdentity((n) => ({
+                ...n,
+                fullName: (e.target as HTMLInputElement).value,
+              }))
+            }
+            placeholder="full name"
+          />
+        </TextFieldRoot>
+        <TextFieldRoot>
+          <TextFieldInput
+            class="tap rounded border border-surface-700 bg-surface-800 px-2 py-1 text-sm text-slate-100"
+            value={newIdentity().passphrase}
+            onInput={(e) =>
+              setNewIdentity((n) => ({
+                ...n,
+                passphrase: (e.target as HTMLInputElement).value,
+              }))
+            }
+            placeholder="passphrase (min 8)"
+            type="password"
+          />
+        </TextFieldRoot>
         <button
           class="tap rounded bg-teal-spectre px-3 py-2 text-sm font-medium text-black disabled:opacity-40"
           disabled={newIdentity().passphrase.length < 8}
@@ -114,12 +122,14 @@ export default function IdentitiesScreen(props: {
         <p class="text-sm text-slate-500">
           Lost your passkey? Re-enroll a new one (rotates the vault key):
         </p>
-        <input
-          class="tap rounded border border-surface-700 bg-surface-800 px-2 py-1 text-sm text-slate-100"
-          value={reEnrollCode()}
-          onInput={(e) => setReEnrollCode((e.target as HTMLInputElement).value)}
-          placeholder="recovery code"
-        />
+        <TextFieldRoot>
+          <TextFieldInput
+            class="tap rounded border border-surface-700 bg-surface-800 px-2 py-1 text-sm text-slate-100"
+            value={reEnrollCode()}
+            onInput={(e) => setReEnrollCode((e.target as HTMLInputElement).value)}
+            placeholder="recovery code"
+          />
+        </TextFieldRoot>
         <button
           class="tap rounded bg-teal-spectre px-3 py-2 text-sm font-medium text-black disabled:opacity-40"
           disabled={reEnrollCode().length < 8}

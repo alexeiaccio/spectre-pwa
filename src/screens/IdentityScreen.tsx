@@ -7,6 +7,10 @@ import {
   For,
   Show,
 } from 'solid-js'
+import {
+  Input as TextFieldInput,
+  Root as TextFieldRoot,
+} from '@kobalte/core/text-field'
 import { PURPOSE_LABEL, NEW_SITE_DRAFT, SiteFields } from './SiteFields.tsx'
 import type { SiteFormState } from './SiteFields.tsx'
 import { copyWithAutoClear } from '../lib/lifecycle.ts'
@@ -196,13 +200,15 @@ export default function IdentityScreen(props: {
             This identity is passphrase-locked. The secret is derived once per
             session:
           </p>
-          <input
-            class="tap rounded border border-surface-700 bg-surface-800 px-2 py-1 text-sm text-slate-100"
-            value={passphrase()}
-            onInput={(e) => setPassphrase((e.target as HTMLInputElement).value)}
-            placeholder="Spectre passphrase"
-            type="password"
-          />
+          <TextFieldRoot>
+            <TextFieldInput
+              class="tap rounded border border-surface-700 bg-surface-800 px-2 py-1 text-sm text-slate-100"
+              value={passphrase()}
+              onInput={(e) => setPassphrase((e.target as HTMLInputElement).value)}
+              placeholder="Spectre passphrase"
+              type="password"
+            />
+          </TextFieldRoot>
           <button
             class="tap rounded bg-teal-spectre px-3 py-2 text-sm font-medium text-black"
             onClick={() => void onUnlockIdentity()}
