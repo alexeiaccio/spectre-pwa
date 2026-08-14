@@ -1,4 +1,14 @@
-import { For, Show } from 'solid-js'
+import { Show } from 'solid-js'
+import {
+  Content as SelectContent,
+  Item as SelectItem,
+  ItemLabel as SelectItemLabel,
+  Listbox as SelectListbox,
+  Portal as SelectPortal,
+  Root as SelectRoot,
+  Trigger as SelectTrigger,
+  Value as SelectValue,
+} from '@kobalte/core/select'
 import {
   Input as NumberFieldInput,
   Root as NumberFieldRoot,
@@ -24,6 +34,53 @@ export const TEMPLATES: Record<string, number> = {
   PIN: 21,
   'Login name': 30,
   Phrase: 31,
+}
+
+const PURPOSE_OPTIONS: { value: Site['purpose']; label: string }[] = [
+  { value: 'password', label: 'password' },
+  { value: 'login', label: 'login name' },
+  { value: 'answer', label: 'security answer' },
+]
+
+const TEMPLATE_OPTIONS: { value: number; label: string }[] = Object.entries(
+  TEMPLATES,
+).map(([label, id]) => ({ value: id, label }))
+
+/** Compact B/W-styled single Kobalte Select for the site form row. */
+function MiniSelect<
+  T extends { value: number | string; label: string },
+>(props: { options: T[]; value: T; onChange: (opt: T) => void }) {
+  return (
+    <SelectRoot<T>
+      options={props.options}
+      optionValue="value"
+      optionTextValue="label"
+      value={props.value}
+      onChange={(opt) => {
+        if (opt) props.onChange(opt)
+      }}
+      itemComponent={(p) => (
+        <SelectItem
+          item={p.item}
+          class="flex tap items-center justify-between gap-2 px-3 py-2 text-sm text-slate-100 data-[highlighted]:bg-surface-700 data-[selected]:text-black"
+        >
+          <SelectItemLabel>{p.item.rawValue.label}</SelectItemLabel>
+        </SelectItem>
+      )}
+    >
+      <SelectTrigger class="flex tap items-center justify-between gap-2 rounded border border-surface-700 bg-surface-800 px-2 py-1 text-sm text-slate-100">
+        <SelectValue<T>>
+          {(state) => state.selectedOption()?.label ?? '…'}
+        </SelectValue>
+        <span class="text-xs text-slate-500">▾</span>
+      </SelectTrigger>
+      <SelectPortal>
+        <SelectContent class="z-10 min-w-[10rem] overflow-hidden rounded border border-surface-700 bg-surface-800 p-1 shadow-lg">
+          <SelectListbox />
+        </SelectContent>
+      </SelectPortal>
+    </SelectRoot>
+  )
 }
 
 export interface SiteFormState {
@@ -64,35 +121,29 @@ export function SiteFields(props: {
         />
       </TextFieldRoot>
       <div class="flex gap-2">
-        <select
-          class="tap rounded border border-surface-700 bg-surface-800 px-2 py-1 text-sm text-slate-100"
-          value={props.draft.purpose}
-          onChange={(e) => {
-            const purpose = (e.target as HTMLSelectElement)
-              .value as Site['purpose']
+        <MiniSelect
+          options={PURPOSE_OPTIONS}
+          value={
+            PURPOSE_OPTIONS.find((o) => o.value === props.draft.purpose) ??
+            PURPOSE_OPTIONS[0]
+          }
+          onChange={(opt) => {
+            const purpose = opt.value
             const template =
               purpose === 'login' ? 30 : purpose === 'answer' ? 31 : 17
             props.setDraft((d) => ({ ...d, purpose, template }))
           }}
-        >
-          <option value="password">password</option>
-          <option value="login">login name</option>
-          <option value="answer">security answer</option>
-        </select>
-        <select
-          class="tap rounded border border-surface-700 bg-surface-800 px-2 py-1 text-sm text-slate-100"
-          value={props.draft.template}
-          onChange={(e) =>
-            props.setDraft((d) => ({
-              ...d,
-              template: Number((e.target as HTMLSelectElement).value),
-            }))
+        />
+        <MiniSelect
+          options={TEMPLATE_OPTIONS}
+          value={
+            TEMPLATE_OPTIONS.find((o) => o.value === props.draft.template) ??
+            TEMPLATE_OPTIONS[0]
           }
-        >
-          <For each={Object.entries(TEMPLATES)}>
-            {([label, id]) => <option value={id}>{label}</option>}
-          </For>
-        </select>
+          onChange={(opt) =>
+            props.setDraft((d) => ({ ...d, template: opt.value }))
+          }
+        />
         <NumberFieldRoot
           value={props.draft.counter}
           minValue={1}
