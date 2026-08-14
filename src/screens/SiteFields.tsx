@@ -1,5 +1,12 @@
 import { For, Show } from 'solid-js'
-import { Input as TextFieldInput, Root as TextFieldRoot } from '@kobalte/core/text-field'
+import {
+  Input as NumberFieldInput,
+  Root as NumberFieldRoot,
+} from '@kobalte/core/number-field'
+import {
+  Input as TextFieldInput,
+  Root as TextFieldRoot,
+} from '@kobalte/core/text-field'
 import type { Site } from '../lib/vault/schema.ts'
 
 export const PURPOSE_LABEL: Record<Site['purpose'], string> = {
@@ -86,36 +93,36 @@ export function SiteFields(props: {
             {([label, id]) => <option value={id}>{label}</option>}
           </For>
         </select>
-        <input
-          class="tap w-16 rounded border border-surface-700 bg-surface-800 px-2 py-1 text-sm text-slate-100"
-          type="number"
-          min={1}
+        <NumberFieldRoot
           value={props.draft.counter}
-          onInput={(e) =>
+          minValue={1}
+          onChange={(v) =>
             props.setDraft((d) => ({
               ...d,
-              counter: Math.max(
-                1,
-                Number((e.target as HTMLInputElement).value),
-              ),
+              counter: Math.max(1, Number(v)),
             }))
           }
-          placeholder="count"
-          title="Spectre counter"
-        />
+        >
+          <NumberFieldInput
+            class="tap w-16 rounded border border-surface-700 bg-surface-800 px-2 py-1 text-sm text-slate-100"
+            title="Spectre counter"
+          />
+        </NumberFieldRoot>
       </div>
       <Show when={props.draft.purpose === 'answer'}>
-        <input
-          class="tap rounded border border-surface-700 bg-surface-800 px-2 py-1 text-sm text-slate-100"
-          value={props.draft.answer}
-          onInput={(e) =>
-            props.setDraft((d) => ({
-              ...d,
-              answer: (e.target as HTMLInputElement).value,
-            }))
-          }
-          placeholder="security question, e.g. childhood pet"
-        />
+        <TextFieldRoot>
+          <TextFieldInput
+            class="tap rounded border border-surface-700 bg-surface-800 px-2 py-1 text-sm text-slate-100"
+            value={props.draft.answer}
+            onInput={(e) =>
+              props.setDraft((d) => ({
+                ...d,
+                answer: (e.target as HTMLInputElement).value,
+              }))
+            }
+            placeholder="security question, e.g. childhood pet"
+          />
+        </TextFieldRoot>
       </Show>
     </>
   )
