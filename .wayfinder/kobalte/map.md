@@ -20,14 +20,14 @@ Replace the app's native form controls with **Kobalte** (`@kobalte/core` Solid 2
 <!-- one line per closed ticket -->
 
 - K1 · Adopt auto-lock selector as the first Kobalte component — **closed as blocked**. The alpha Select renders (trigger/value/theme) and its API is pinned (subpath imports, scalar value, render-prop `selectedOption()`), but **the popover never opens** (`aria-expanded` stays false, options don't mount) and Kobalte's own `ButtonRoot` emits `STRICT_READ_UNTRACKED` warnings under Solid 2 rc.0 strict mode. Both are library-side. **Reverted to native `<select>`.** Revisit when `@kobalte/core` alpha ships a Solid-2-rc-clean release; K1 is the re-entry test. Fallback if it doesn't mature: hand-rolled headless Select.
-- K3 · **TextField is adoptable** (no popover machinery). Site-name + security-answer inputs now use Kobalte TextField; verified typing + optimistic add works, zero warnings.
+- K3 · **TextField is adoptable** (no popover machinery) — **done**. All text inputs use Kobalte TextField: site name, security answer (SiteFields), full name, passphrase, re-enroll code (IdentitiesScreen), identity passphrase (IdentityScreen), recovery codes (Locked/Setup/Join). Verified add-identity + add-site through TextFields, zero warnings.
 - K4 · **NumberField is adoptable**. Counter input now uses Kobalte NumberField (`value`/`onChange` + `minValue`); verified counter → row `#N` propagates. Its `STRICT_READ_UNTRACKED` warnings are **cosmetic** (value still flows), unlike Select's broken open.
 
 ## Tickets
 
 - [K1 · Auto-lock selector via Kobalte Select](tickets/K1.md) — **closed (blocked)**: API pinned, open toggle broken, reverted.
 - [K2 · Site form selects via Kobalte Select](tickets/K2.md) — blocked on a working Kobalte alpha (purpose/template selects still native).
-- [K3 · Text inputs via Kobalte TextField](tickets/K3.md) — **in progress**: site-name + security answer done; remaining: full name, passphrase, recovery code.
+- [K3 · Text inputs via Kobalte TextField](tickets/K3.md) — **done**: site name, security answer, full name, passphrase, recovery codes all on TextField.
 - [K4 · Spectre counter via Kobalte NumberField](tickets/K4.md) — **done** (counter in SiteFields).
 
 ## Out of scope
