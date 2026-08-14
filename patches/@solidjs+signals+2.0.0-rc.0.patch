@@ -1,0 +1,19 @@
+diff --git a/node_modules/@solidjs/signals/dist/dev.js b/node_modules/@solidjs/signals/dist/dev.js
+index 8caa96e..b6c33c2 100644
+--- a/node_modules/@solidjs/signals/dist/dev.js
++++ b/node_modules/@solidjs/signals/dist/dev.js
+@@ -192,7 +192,13 @@ function warnStrictReadUntracked(strictReadLabel, fields) {
+     data: { strictRead: strictReadLabel },
+     ...fields
+   });
+-  console.warn(message);
++  // PATCH (spectre-pwa): the STRICT_READ_UNTRACKED console warning fires only
++  // when a component passes a strictReadLabel to untrack(). In this repo no
++  // app code does — every occurrence is inside pre-rc.0 library internals
++  // (Kobalte alpha) whose reads are verified to still update under Solid 2
++  // rc.0. Keep the diagnostic emitted (DevTools/listeners observe it) but
++  // stop spamming the console. Production builds never reach this anyway.
++  // eslint-disable-next-line no-console
+ }
+ function registerGraph(value, owner) {
+   value._owner = owner;
