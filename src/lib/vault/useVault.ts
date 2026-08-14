@@ -13,11 +13,15 @@ export type VaultStatus =
   | { kind: 'unlocked'; vault: Vault }
   | { kind: 'error'; message: string }
 
-const runPromise = <A, E>(effect: Effect.Effect<A, E>): Promise<A> => Effect.runPromise(effect)
+export type VaultApi = ReturnType<typeof useVault>
 
-const messageOf = (e: unknown): string => (e && typeof e === 'object' && 'message' in e
-  ? String((e as Error).message)
-  : 'unknown error')
+const runPromise = <A, E>(effect: Effect.Effect<A, E>): Promise<A> =>
+  Effect.runPromise(effect)
+
+const messageOf = (e: unknown): string =>
+  e && typeof e === 'object' && 'message' in e
+    ? String((e as Error).message)
+    : 'unknown error'
 
 /**
  * Ask the browser to persist storage (eviction exemption). Best-effort; the
@@ -48,12 +52,17 @@ export function useVault() {
     }
   })
 
-  const fail = (e: unknown) => setStatus({ kind: 'error', message: messageOf(e) })
+  const fail = (e: unknown) =>
+    setStatus({ kind: 'error', message: messageOf(e) })
 
   // Boot: detect setup vs locked. One-shot side effect — Solid 2 beta's createEffect
   // requires (compute, effect) and won't accept a single side-effect fn, so call directly.
   const boot = (): void => {
-    void runPromise(readEnvelope()).then((env) => setStatus(env ? { kind: 'locked' } : { kind: 'needs-setup' })).catch(fail)
+    void runPromise(readEnvelope())
+      .then((env) =>
+        setStatus(env ? { kind: 'locked' } : { kind: 'needs-setup' }),
+      )
+      .catch(fail)
   }
   boot()
 
@@ -69,11 +78,12 @@ export function useVault() {
     }
   }
 
-  const setup = (recoveryCode: string): Promise<{ recoveryRecord: WrappedDeK; identity: Vault } | undefined> =>
+  const setup = (
+    recoveryCode: string,
+  ): Promise<{ recoveryRecord: WrappedDeK; identity: Vault } | undefined> =>
     withBusy(async () => {
-      const result: { recoveryRecord: WrappedDeK; identity: Vault } = await runPromise(
-        vaultImpl.setup(recoveryCode),
-      )
+      const result: { recoveryRecord: WrappedDeK; identity: Vault } =
+        await runPromise(vaultImpl.setup(recoveryCode))
       setStatus({ kind: 'unlocked', vault: result.identity })
       return result
     })
@@ -95,7 +105,9 @@ export function useVault() {
 
   const reEnrollPasskey = (recoveryCode: string): Promise<Vault | undefined> =>
     withBusy(async () => {
-      const { vault } = await runPromise(vaultImpl.reEnrollPasskey(recoveryCode))
+      const { vault } = await runPromise(
+        vaultImpl.reEnrollPasskey(recoveryCode),
+      )
       setStatus({ kind: 'unlocked', vault })
       return vault
     })
@@ -108,17 +120,36 @@ export function useVault() {
     }).then((v) => v === true)
 
   const setAutoLockMinutes = (minutes: number): Promise<boolean> =>
-    withBusy(async () => {
-      const next: Prefs = { ...prefs(), autoLockMinutes: minutes }
-      await runPromise(writePrefs(next))
+    // Update the selector optimistically first (the writable-memo setter overrides
+    // locally without re-running the source), then persist; revert on failure.
+    // eslint-disable-next-line solid/reactivity
+    new Promise<boolean>((resolve) => {
+      const current = prefs()
+      const next: Prefs = { ...current, autoLockMinutes: minutes }
       setPrefs(next)
-      return true
-    }).then((v) => v === true)
+      runPromise(writePrefs(next))
+        .then(() => resolve(true))
+        .catch(() => {
+          setPrefs(current)
+          resolve(false)
+        })
+    })
 
   const lock = (): void => {
     vaultImpl.lock()
     setStatus({ kind: 'locked' })
   }
 
-  return { status, busy, prefs, setAutoLockMinutes, setup, unlock, unlockWithRecovery, reEnrollPasskey, save, lock }
+  return {
+    status,
+    busy,
+    prefs,
+    setAutoLockMinutes,
+    setup,
+    unlock,
+    unlockWithRecovery,
+    reEnrollPasskey,
+    save,
+    lock,
+  }
 }
