@@ -19,14 +19,14 @@ Replace the app's native form controls with **Kobalte** (`@kobalte/core` Solid 2
 
 <!-- one line per closed ticket -->
 
-- K1 · Adopt auto-lock selector as the first Kobalte component — pin the alpha Select API (collection shape, styling hooks) against a real, low-risk control. **Status: in progress** (see `tickets/K1.md`).
+- K1 · Adopt auto-lock selector as the first Kobalte component — **closed as blocked**. The alpha Select renders (trigger/value/theme) and its API is pinned (subpath imports, scalar value, render-prop `selectedOption()`), but **the popover never opens** (`aria-expanded` stays false, options don't mount) and Kobalte's own `ButtonRoot` emits 4 `STRICT_READ_UNTRACKED` warnings under Solid 2 rc.0 strict mode. Both are library-side. **Reverted to native `<select>`.** Revisit when `@kobalte/core` alpha ships a Solid-2-rc-clean release; K1 is the re-entry test. Fallback if it doesn't mature: hand-rolled headless Select.
 
 ## Tickets
 
-- [K1 · Auto-lock selector via Kobalte Select](tickets/K1.md) — replace the native `<select>` on the identities screen; pin the alpha's collection-based Select API and the `data-*`/Tailwind styling hooks.
-- [K2 · Site form selects via Kobalte Select](tickets/K2.md) — purpose + template selects in the shared `SiteFields`; the two-select row (purpose → template auto-bump) is the core form surface.
-- [K3 · Site name / passphrase inputs via Kobalte TextField](tickets/K3.md) — site name, security answer, full name, passphrase inputs.
-- [K4 · Spectre counter via Kobalte NumberField](tickets/K4.md) — the add/edit counter spinbutton.
+- [K1 · Auto-lock selector via Kobalte Select](tickets/K1.md) — **closed (blocked)**: API pinned, open toggle broken, reverted.
+- [K2 · Site form selects via Kobalte Select](tickets/K2.md) — blocked on a working Kobalte alpha.
+- [K3 · Text inputs via Kobalte TextField](tickets/K3.md) — blocked on a working Kobalte alpha.
+- [K4 · Spectre counter via Kobalte NumberField](tickets/K4.md) — blocked on a working Kobalte alpha.
 
 ## Out of scope
 

@@ -160,7 +160,7 @@ export default function IdentityScreen(props: {
         namePlaceholder="site name, e.g. twitter.com"
       />
       <button
-        class="tap rounded bg-teal-spectre px-3 py-2 text-sm font-medium text-white"
+        class="tap rounded bg-teal-spectre px-3 py-2 text-sm font-medium text-black"
         onClick={() => void onAddSite()}
       >
         Add site
@@ -204,7 +204,7 @@ export default function IdentityScreen(props: {
             type="password"
           />
           <button
-            class="tap rounded bg-teal-spectre px-3 py-2 text-sm font-medium text-white"
+            class="tap rounded bg-teal-spectre px-3 py-2 text-sm font-medium text-black"
             onClick={() => void onUnlockIdentity()}
           >
             Unlock identity
@@ -274,7 +274,7 @@ export default function IdentityScreen(props: {
                       />
                       <div class="flex gap-2">
                         <button
-                          class="tap rounded bg-teal-spectre px-3 py-1 text-xs font-medium text-white"
+                          class="tap rounded bg-teal-spectre px-3 py-1 text-xs font-medium text-black"
                           onClick={() => void onUpdateSite(site)}
                         >
                           Save
