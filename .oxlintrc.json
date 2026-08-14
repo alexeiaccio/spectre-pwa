@@ -1,0 +1,61 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "extends": ["./node_modules/@effect/tsgo/oxlint-presets/recommended.json"],
+  "plugins": ["eslint", "typescript", "unicorn", "oxc", "import", "vitest"],
+  "categories": {
+    "correctness": "warn",
+    "suspicious": "warn"
+  },
+  "jsPlugins": ["eslint-plugin-solid"],
+  "rules": {
+    "solid/no-destructure": "error",
+    "solid/prefer-for": "error",
+    "solid/jsx-no-duplicate-props": "error",
+    "solid/jsx-no-undef": ["error", { "typescriptEnabled": true }],
+    "solid/jsx-uses-vars": "error",
+    "solid/no-innerhtml": "error",
+    "solid/components-return-once": "warn",
+    "solid/event-handlers": "warn",
+    "solid/reactivity": "warn",
+    "solid/no-unknown-namespaces": "off",
+    "eslint/no-underscore-dangle": ["warn", { "allow": ["_tag"] }],
+    "import/no-unassigned-import": ["warn", { "allow": ["**/*.css"] }],
+    /* Rules the Effect LSP ships off by default; the oxlint preset enables
+       them, but they flag non-Effect code (UI event handlers, test scaffolding,
+       the standard `Effect.tryPromise(async () => ...)` idiom) and rules that
+       have no Effect-idiomatic replacement in Effect v4 smol (Random.uuid). */
+    "effecttsgo/async-function": "off",
+    "effecttsgo/crypto-random-uuid": "off",
+    "effecttsgo/crypto-random-uuid-in-effect": "off",
+    "effecttsgo/global-date": "off",
+    "effecttsgo/global-random": "off",
+    "effecttsgo/global-timers": "off",
+    "effecttsgo/lazy-effect": "off",
+    "effecttsgo/node-builtin-import": "off"
+  },
+  "ignorePatterns": [
+    "dist/**",
+    "node_modules/**",
+    "public/**",
+    ".playwright-mcp/**",
+    ".wayfinder/**",
+    ".wrangler/**",
+    "crates/**",
+    "src/lib/spike/**",
+    "index.html",
+    "spike.html",
+    "wrangler.toml"
+  ],
+  "overrides": [
+    {
+      "files": ["**/test/**", "**/tests/**"],
+      "env": { "vitest": true },
+      "rules": {
+        "effecttsgo/new-promise": "off",
+        "typescript/await-thenable": "off",
+        "typescript/no-unsafe-type-assertion": "off",
+        "typescript/no-unnecessary-type-assertion": "off"
+      }
+    }
+  ]
+}

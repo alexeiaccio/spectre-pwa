@@ -49,6 +49,11 @@ export class SyncNode {
      */
     connect_docs(node_id_hex: string): Promise<string>;
     /**
+     * Dial the peers from a ticket using their relay addresses (no address-lookup
+     * dependency) and hold the connections. Returns the number connected.
+     */
+    connect_peer(ticket_str: string): Promise<string>;
+    /**
      * Create a new empty doc, start sync on it, return the share ticket.
      */
     create_doc(): Promise<string>;
@@ -57,13 +62,34 @@ export class SyncNode {
      */
     doc_id_from_ticket(ticket_str: string): string;
     /**
+     * Export the default author's 32 bytes as hex, so record edits keep a stable
+     * author identity across reloads (persist it and re-import on boot).
+     */
+    export_default_author(): Promise<string>;
+    /**
+     * Export this node's SecretKey as hex (32 bytes). Call once, store in IndexedDB.
+     */
+    export_secret_key(): string;
+    /**
      * Read the latest value for a key, or null.
      */
     get(doc_id: string, key: string): Promise<any>;
     /**
-     * Import a doc from a share ticket, join its peers, and start syncing.
+     * Import a 32-byte author (hex) and make it the node's default author.
+     */
+    import_default_author(author_hex: string): Promise<void>;
+    /**
+     * Import a doc from a share ticket, dial its peers over the docs ALPN using the
+     * relay address embedded in the ticket (no address-lookup dependency), hold the
+     * connections (iroh reuses them for the engine's own dial), then start syncing.
      */
     import_ticket(ticket_str: string): Promise<string>;
+    /**
+     * Import + connect peers via relay + retry `start_sync` until a sync attempt lands.
+     * The engine's first dial can fail with "Failed to establish connection" (relay peer
+     * not yet reachable); retrying after the relay connection is established succeeds.
+     */
+    join_and_sync(ticket_str: string): Promise<string>;
     /**
      * This node's public endpoint id (hex).
      */
@@ -77,16 +103,27 @@ export class SyncNode {
      */
     remote_info(node_id_hex: string): Promise<string>;
     /**
+     * Re-trigger sync with the ticket's peers on an already-imported doc (retry after boot).
+     */
+    resync(ticket_str: string): Promise<string>;
+    /**
      * Insert a key/value entry under the default author. Value travels in the
      * entry key (key␀value); content bytes are still written to the blobs store.
      */
     set(doc_id: string, key: string, value: string): Promise<void>;
     /**
      * Create a node bound to the n0 public relay + all protocols (blobs, gossip, docs).
+     * Uses a fresh random SecretKey, so the node id changes on every reload.
      */
     static start(): Promise<SyncNode>;
     /**
-     * Subscribe to live inserts for one doc; each value arrives as a JS string.
+     * Create a node from a persisted SecretKey (32 bytes, hex-encoded). The same
+     * key always yields the same node id, so the node survives reloads.
+     */
+    static start_with_secret_key(secret_key_hex: string): Promise<SyncNode>;
+    /**
+     * Subscribe to live events for one doc. Value inserts arrive as plain strings;
+     * sync lifecycle events arrive as "SYNC:<...>" so callers can distinguish them.
      */
     subscribe(doc_id: string, on_event: Function): Promise<void>;
     /**
@@ -109,15 +146,22 @@ export interface InitOutput {
     readonly memory: WebAssembly.Memory;
     readonly __wbg_syncnode_free: (a: number, b: number) => void;
     readonly syncnode_connect_docs: (a: number, b: number, c: number) => any;
+    readonly syncnode_connect_peer: (a: number, b: number, c: number) => any;
     readonly syncnode_create_doc: (a: number) => any;
     readonly syncnode_doc_id_from_ticket: (a: number, b: number, c: number) => [number, number, number, number];
+    readonly syncnode_export_default_author: (a: number) => any;
+    readonly syncnode_export_secret_key: (a: number) => [number, number, number, number];
     readonly syncnode_get: (a: number, b: number, c: number, d: number, e: number) => any;
+    readonly syncnode_import_default_author: (a: number, b: number, c: number) => any;
     readonly syncnode_import_ticket: (a: number, b: number, c: number) => any;
+    readonly syncnode_join_and_sync: (a: number, b: number, c: number) => any;
     readonly syncnode_node_id: (a: number) => [number, number];
     readonly syncnode_relay_status: (a: number) => [number, number];
     readonly syncnode_remote_info: (a: number, b: number, c: number) => any;
+    readonly syncnode_resync: (a: number, b: number, c: number) => any;
     readonly syncnode_set: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => any;
     readonly syncnode_start: () => any;
+    readonly syncnode_start_with_secret_key: (a: number, b: number) => any;
     readonly syncnode_subscribe: (a: number, b: number, c: number, d: any) => any;
     readonly syncnode_sync_peers: (a: number, b: number, c: number) => any;
     readonly syncnode_sync_status: (a: number, b: number, c: number) => any;

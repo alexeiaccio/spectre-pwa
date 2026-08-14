@@ -22,6 +22,8 @@ Working peer-to-peer vault sync across multiple installs of Spectre Pocket: iden
   - **Per-device DEK, re-encrypt on merge** — deliberately *not* a single shared DEK.
   - **n0 public relay**, relay URL kept configurable so a self-hosted relay can be swapped in later.
   - **Foreground-only sync** (app open + online); no background/periodic sync.
+- **Routing seam ready (2026-08-14)** — the routing effort (`.wayfinder/routing/`) landed its spec: `spec-screen-module.md` §9 contracts S5's join flow (**`{ view: 'join' }` union case, internal steps, no per-step URLs**), the pairing section (**inline on the identities screen**, no case), and S6's migration (**`{ view: 'migrating' }` transient case**). The seam never imports iroh/envelope/DEK — Sync ships flow logic behind screen components. **S5 implementation is unblocked**; the harness (Vitest browser mode) and Oxc lint/format are landed too.
+- **S5 implemented (2026-08-14)** — fresh-join flow + pairing section landed on the seam (`src/lib/sync/`: records/adapter/types/pairing, `JoinScreen`, join links, `useVault.importJoined`; 67 tests green). Follow-ups tracked in the S5 ticket: existing-vault adopt-code join, QR, PRF-salt persistence, node-id persistence, A-side live writes, and live sync stays experimental (S7).
 - Glossary: `CONTEXT.md` at repo root.
 
 ## Decisions so far

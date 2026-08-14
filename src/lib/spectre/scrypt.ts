@@ -9,6 +9,10 @@ const P = 2
  * Returns dkLen bytes. Non-blocking (chunks work so a 33 MiB working set does not
  * freeze the UI thread) — run in a worker for real UIs.
  */
-export function scrypt(password: Uint8Array, salt: Uint8Array, dkLen: number): Promise<Uint8Array> {
+export function scrypt(
+  password: Uint8Array,
+  salt: Uint8Array,
+  dkLen: number,
+): Promise<Uint8Array> {
   return new Scrypt(N, R, P).deriveKeyNonBlocking(password, salt, dkLen)
 }

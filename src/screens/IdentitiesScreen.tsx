@@ -103,7 +103,7 @@ export default function IdentitiesScreen(props: {
         </p>
         <TextFieldRoot>
           <TextFieldInput
-            class="tap rounded border border-surface-700 bg-surface-800 px-2 py-1 text-sm text-slate-100"
+            class="tap w-full rounded border border-surface-700 bg-surface-800 px-2 py-1 text-sm text-slate-100"
             value={newIdentity().fullName}
             onInput={(e) =>
               setNewIdentity((n) => ({
@@ -116,7 +116,7 @@ export default function IdentitiesScreen(props: {
         </TextFieldRoot>
         <TextFieldRoot>
           <TextFieldInput
-            class="tap rounded border border-surface-700 bg-surface-800 px-2 py-1 text-sm text-slate-100"
+            class="tap w-full rounded border border-surface-700 bg-surface-800 px-2 py-1 text-sm text-slate-100"
             value={newIdentity().passphrase}
             onInput={(e) =>
               setNewIdentity((n) => ({
@@ -147,9 +147,11 @@ export default function IdentitiesScreen(props: {
         </p>
         <TextFieldRoot>
           <TextFieldInput
-            class="tap rounded border border-surface-700 bg-surface-800 px-2 py-1 text-sm text-slate-100"
+            class="tap w-full rounded border border-surface-700 bg-surface-800 px-2 py-1 text-sm text-slate-100"
             value={reEnrollCode()}
-            onInput={(e) => setReEnrollCode((e.target as HTMLInputElement).value)}
+            onInput={(e) =>
+              setReEnrollCode((e.target as HTMLInputElement).value)
+            }
             placeholder="recovery code"
           />
         </TextFieldRoot>
@@ -171,17 +173,24 @@ export default function IdentitiesScreen(props: {
           options={AUTO_LOCK_OPTIONS}
           optionValue="value"
           optionTextValue="label"
-          value={AUTO_LOCK_OPTIONS.find((o) => o.value === props.prefs().autoLockMinutes) ?? AUTO_LOCK_OPTIONS[0]}
+          value={
+            AUTO_LOCK_OPTIONS.find(
+              (o) => o.value === props.prefs().autoLockMinutes,
+            ) ?? AUTO_LOCK_OPTIONS[0]
+          }
           onChange={(opt) => {
             if (opt) props.onSetAutoLock(opt.value)
           }}
           itemComponent={(p) => (
-            <SelectItem item={p.item} class="tap flex items-center justify-between gap-2 px-3 py-2 text-sm text-slate-100 data-[highlighted]:bg-surface-700 data-[selected]:text-black">
+            <SelectItem
+              item={p.item}
+              class="flex tap items-center justify-between gap-2 px-3 py-2 text-sm text-slate-100 data-[highlighted]:bg-surface-700 data-[selected]:text-black"
+            >
               <SelectItemLabel>{p.item.rawValue.label}</SelectItemLabel>
             </SelectItem>
           )}
         >
-          <SelectTrigger class="tap flex w-full items-center justify-between rounded border border-surface-700 bg-surface-800 px-2 py-1 text-sm text-slate-100">
+          <SelectTrigger class="flex tap w-full items-center justify-between rounded border border-surface-700 bg-surface-800 px-2 py-1 text-sm text-slate-100">
             <SelectValue<AutoLockOption>>
               {(state) => state.selectedOption()?.label ?? '…'}
             </SelectValue>

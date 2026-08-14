@@ -1,24 +1,42 @@
 import type { Identity, Site, Vault } from './schema.ts'
 
 /** Append a site to an identity, returning a new Vault (no-op if the identity is missing). */
-export const addSite = (vault: Vault, identityId: string, site: Site): Vault => ({
+export const addSite = (
+  vault: Vault,
+  identityId: string,
+  site: Site,
+): Vault => ({
   ...vault,
-  identities: vault.identities.map((i) => (i.id === identityId ? { ...i, sites: [...i.sites, site] } : i)),
+  identities: vault.identities.map((i) =>
+    i.id === identityId ? { ...i, sites: [...i.sites, site] } : i,
+  ),
 })
 
 /** Replace one site in place (matched by id). No-op if the site or identity is missing. */
-export const updateSite = (vault: Vault, identityId: string, site: Site): Vault => ({
+export const updateSite = (
+  vault: Vault,
+  identityId: string,
+  site: Site,
+): Vault => ({
   ...vault,
   identities: vault.identities.map((i) =>
-    i.id === identityId ? { ...i, sites: i.sites.map((st) => (st.id === site.id ? site : st)) } : i
+    i.id === identityId
+      ? { ...i, sites: i.sites.map((st) => (st.id === site.id ? site : st)) }
+      : i,
   ),
 })
 
 /** Remove one site by id. No-op if the site or identity is missing. */
-export const deleteSite = (vault: Vault, identityId: string, siteId: string): Vault => ({
+export const deleteSite = (
+  vault: Vault,
+  identityId: string,
+  siteId: string,
+): Vault => ({
   ...vault,
   identities: vault.identities.map((i) =>
-    i.id === identityId ? { ...i, sites: i.sites.filter((st) => st.id !== siteId) } : i
+    i.id === identityId
+      ? { ...i, sites: i.sites.filter((st) => st.id !== siteId) }
+      : i,
   ),
 })
 
@@ -29,4 +47,7 @@ export const deleteIdentity = (vault: Vault, identityId: string): Vault => ({
 })
 
 /** Empty-identity shorthand for callers that build a new identity. */
-export const identityWithSites = (identity: Identity, sites: Site[]): Identity => ({ ...identity, sites })
+export const identityWithSites = (
+  identity: Identity,
+  sites: Site[],
+): Identity => ({ ...identity, sites })

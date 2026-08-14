@@ -1,49 +1,63 @@
-import { test } from 'node:test'
-import assert from 'node:assert/strict'
-import { newUserKey, newSiteKey, renderSiteKey } from '../src/lib/spectre/spectre-algorithm.ts'
+import { expect, test } from 'vitest'
+import {
+  newUserKey,
+  newSiteKey,
+  renderSiteKey,
+} from '../src/lib/spectre/spectre-algorithm.ts'
 
 const NAME = 'Robert Lee Mitchell'
 const SECRET = 'banana colored duckling'
 const SITE = 'masterpasswordapp.com'
 
-async function pw(version: number, site = SITE, counter = 1, purpose = 'authentication' as const, context: string | null = null, type = 17) {
+async function pw(
+  version: number,
+  site = SITE,
+  counter = 1,
+  purpose = 'authentication' as const,
+  context: string | null = null,
+  type = 17,
+) {
   const userKey = await newUserKey(NAME, SECRET, version as never)
   const siteKey = await newSiteKey(userKey, site, counter, purpose, context)
   return renderSiteKey(siteKey.key, siteKey.version, type)
 }
 
 test('bit-identical to Master Password V3 (official vector)', async () => {
-  assert.equal(await pw(3), 'Jejr5[RepuSosp')
+  expect(await pw(3)).toBe('Jejr5[RepuSosp')
 })
 
 test('V0 host-endian quirk', async () => {
-  assert.equal(await pw(0), 'Feji5@ReduWosh')
+  expect(await pw(0)).toBe('Feji5@ReduWosh')
 })
 
 test('result types (V3)', async () => {
-  assert.equal(await pw(3, SITE, 1, 'authentication', null, 16), 'W6@692^B1#&@gVdSdLZ@')
-  assert.equal(await pw(3, SITE, 1, 'authentication', null, 18), 'Jej2$Quv')
-  assert.equal(await pw(3, SITE, 1, 'authentication', null, 20), 'WAo2xIg6')
-  assert.equal(await pw(3, SITE, 1, 'authentication', null, 19), 'Jej2')
-  assert.equal(await pw(3, SITE, 1, 'authentication', null, 21), '7662')
+  expect(await pw(3, SITE, 1, 'authentication', null, 16)).toBe(
+    'W6@692^B1#&@gVdSdLZ@',
+  )
+  expect(await pw(3, SITE, 1, 'authentication', null, 18)).toBe('Jej2$Quv')
+  expect(await pw(3, SITE, 1, 'authentication', null, 20)).toBe('WAo2xIg6')
+  expect(await pw(3, SITE, 1, 'authentication', null, 19)).toBe('Jej2')
+  expect(await pw(3, SITE, 1, 'authentication', null, 21)).toBe('7662')
 })
 
 test('purpose scoping', async () => {
-  assert.equal(await pw(3, SITE, 1, 'identification', null, 30), 'wohzaqage')
-  assert.equal(await pw(3, SITE, 1, 'recovery', null, 31), 'xin diyjiqoja hubu')
-  assert.equal(await pw(3, SITE, 1, 'recovery', 'question', 31), 'xogx tem cegyiva jab')
+  expect(await pw(3, SITE, 1, 'identification', null, 30)).toBe('wohzaqage')
+  expect(await pw(3, SITE, 1, 'recovery', null, 31)).toBe('xin diyjiqoja hubu')
+  expect(await pw(3, SITE, 1, 'recovery', 'question', 31)).toBe(
+    'xogx tem cegyiva jab',
+  )
 })
 
 test('counter ceiling', async () => {
-  assert.equal(await pw(3, SITE, 4294967295), 'XambHoqo6[Peni')
-  assert.equal(await pw(0, SITE, 4294967295), 'QateDojh1@Hecn')
+  expect(await pw(3, SITE, 4294967295)).toBe('XambHoqo6[Peni')
+  expect(await pw(0, SITE, 4294967295)).toBe('QateDojh1@Hecn')
 })
 
 test('multibyte length rules pin the encoding logic', async () => {
-  assert.equal(await pw(0, '⛄'), 'HahiVana2@Nole')
-  assert.equal(await pw(1, '⛄'), 'WawiYarp2@Kodh')
-  assert.equal(await pw(2, '⛄'), 'LiheCuwhSerz6)')
-  assert.equal(await pw(3, '⛄'), 'LiheCuwhSerz6)')
+  expect(await pw(0, '⛄')).toBe('HahiVana2@Nole')
+  expect(await pw(1, '⛄')).toBe('WawiYarp2@Kodh')
+  expect(await pw(2, '⛄')).toBe('LiheCuwhSerz6)')
+  expect(await pw(3, '⛄')).toBe('LiheCuwhSerz6)')
 })
 
 test('multibyte fullName cases', async () => {
@@ -55,6 +69,6 @@ test('multibyte fullName cases', async () => {
   for (const [version, expected] of cases) {
     const userKey = await newUserKey('⛄', SECRET, version as never)
     const siteKey = await newSiteKey(userKey, SITE, 1, 'authentication', null)
-    assert.equal(renderSiteKey(siteKey.key, siteKey.version, 17), expected)
+    expect(renderSiteKey(siteKey.key, siteKey.version, 17)).toBe(expected)
   }
 })

@@ -73,7 +73,11 @@ export const TEMPLATES: Record<number, string[]> = {
   [RESULT_TYPE.Basic]: ['aaanaaan', 'aannaaan', 'aaannaaa'],
   [RESULT_TYPE.PIN]: ['nnnn'],
   [RESULT_TYPE.Name]: ['cvccvcvcv'],
-  [RESULT_TYPE.Phrase]: ['cvcc cvc cvccvcv cvc', 'cvc cvccvcvcv cvcv', 'cv cvccv cvc cvcvccv'],
+  [RESULT_TYPE.Phrase]: [
+    'cvcc cvc cvccvcv cvc',
+    'cvc cvccvcvcv cvcv',
+    'cv cvccv cvc cvcvccv',
+  ],
 }
 
 /** Character classes — copy the code's strings, not the paper's typography. */

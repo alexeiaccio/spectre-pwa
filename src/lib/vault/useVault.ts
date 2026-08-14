@@ -1,14 +1,23 @@
 import { createSignal } from 'solid-js'
 import { Effect } from 'effect'
 import { vaultImpl } from './service.ts'
-import { readEnvelope, readPrefs, writePrefs } from './storage.ts'
-import type { Prefs, Vault, WrappedDeK } from './schema.ts'
+import {
+  hasLegacyVault,
+  readDeviceEnvelope,
+  readMeta,
+  readPrefs,
+  writePrefs,
+} from './storage.ts'
+import type { AesKey } from './crypto-dek.ts'
+import type { Envelope, Prefs, Vault, WrappedDeK } from './schema.ts'
+import type { SyncRecord } from '../sync/types.ts'
 
 const DEFAULT_PREFS: Prefs = { theme: 'dark', autoLockMinutes: 2 }
 
 export type VaultStatus =
   | { kind: 'booting' }
   | { kind: 'needs-setup' }
+  | { kind: 'needs-migration' }
   | { kind: 'locked' }
   | { kind: 'unlocked'; vault: Vault }
   | { kind: 'error'; message: string }
@@ -18,10 +27,14 @@ export type VaultApi = ReturnType<typeof useVault>
 const runPromise = <A, E>(effect: Effect.Effect<A, E>): Promise<A> =>
   Effect.runPromise(effect)
 
-const messageOf = (e: unknown): string =>
-  e && typeof e === 'object' && 'message' in e
-    ? String((e as Error).message)
-    : 'unknown error'
+const messageOf = (e: unknown): string => {
+  if (e instanceof Error) return e.message
+  if (typeof e === 'object' && e !== null && 'message' in e) {
+    const message = e.message
+    if (typeof message === 'string') return message
+  }
+  return 'unknown error'
+}
 
 /**
  * Ask the browser to persist storage (eviction exemption). Best-effort; the
@@ -34,9 +47,9 @@ const requestPersist = (): void => {
 }
 
 /**
- * Owns the vault lifecycle for the UI: boot (detect setup vs locked), setup,
- * unlock by passkey, unlock by recovery code, save, lock.
- * The underlying services are module-level (single-instance); status is a Solid signal.
+ * Owns the vault lifecycle for the UI: boot (detect fresh vs migration vs v3
+ * locked), setup, unlock by passkey / recovery code, save, migrate, lock.
+ * The underlying services are Effect services (single runtime); status is a Solid signal.
  */
 export function useVault() {
   const [status, setStatus] = createSignal<VaultStatus>({ kind: 'booting' })
@@ -55,13 +68,24 @@ export function useVault() {
   const fail = (e: unknown) =>
     setStatus({ kind: 'error', message: messageOf(e) })
 
-  // Boot: detect setup vs locked. One-shot side effect — Solid 2 beta's createEffect
-  // requires (compute, effect) and won't accept a single side-effect fn, so call directly.
+  // Boot: v3 vault (migrated) → locked; legacy v1 blob → needs-migration; else fresh.
   const boot = (): void => {
-    void runPromise(readEnvelope())
-      .then((env) =>
-        setStatus(env ? { kind: 'locked' } : { kind: 'needs-setup' }),
-      )
+    void runPromise(readMeta())
+      .then(async (meta) => {
+        if (meta?.migrated) {
+          const envelope = await runPromise(readDeviceEnvelope(meta.deviceId))
+          setStatus(
+            envelope
+              ? { kind: 'locked' }
+              : { kind: 'error', message: 'vault store is inconsistent' },
+          )
+          return
+        }
+        const legacy = await runPromise(hasLegacyVault())
+        setStatus(
+          legacy ? { kind: 'needs-migration' } : { kind: 'needs-setup' },
+        )
+      })
       .catch(fail)
   }
   boot()
@@ -103,6 +127,15 @@ export function useVault() {
       return vault
     })
 
+  const migrate = (
+    method: { kind: 'passkey' } | { kind: 'recovery'; code: string },
+  ): Promise<Vault | undefined> =>
+    withBusy(async () => {
+      const { vault } = await runPromise(vaultImpl.migrate(method))
+      setStatus({ kind: 'unlocked', vault })
+      return vault
+    })
+
   const reEnrollPasskey = (recoveryCode: string): Promise<Vault | undefined> =>
     withBusy(async () => {
       const { vault } = await runPromise(
@@ -119,24 +152,36 @@ export function useVault() {
       return true
     }).then((v) => v === true)
 
-  const setAutoLockMinutes = (minutes: number): Promise<boolean> =>
+  const importJoined = (joined: {
+    deviceId: string
+    envelope: Envelope
+    records: Map<string, SyncRecord>
+    dek: AesKey
+  }): Promise<Vault | undefined> =>
+    withBusy(async () => {
+      const result = await runPromise(vaultImpl.joinImport(joined))
+      setStatus({ kind: 'unlocked', vault: result.vault })
+      return result.vault
+    })
+
+  const setAutoLockMinutes = async (minutes: number): Promise<boolean> => {
     // Update the selector optimistically first (the writable-memo setter overrides
     // locally without re-running the source), then persist; revert on failure.
     // eslint-disable-next-line solid/reactivity
-    new Promise<boolean>((resolve) => {
-      const current = prefs()
-      const next: Prefs = { ...current, autoLockMinutes: minutes }
-      setPrefs(next)
-      runPromise(writePrefs(next))
-        .then(() => resolve(true))
-        .catch(() => {
-          setPrefs(current)
-          resolve(false)
-        })
-    })
+    const current = prefs()
+    const next: Prefs = { ...current, autoLockMinutes: minutes }
+    setPrefs(next)
+    try {
+      await runPromise(writePrefs(next))
+      return true
+    } catch {
+      setPrefs(current)
+      return false
+    }
+  }
 
   const lock = (): void => {
-    vaultImpl.lock()
+    Effect.runSync(vaultImpl.lock())
     setStatus({ kind: 'locked' })
   }
 
@@ -148,8 +193,10 @@ export function useVault() {
     setup,
     unlock,
     unlockWithRecovery,
+    migrate,
     reEnrollPasskey,
     save,
+    importJoined,
     lock,
   }
 }

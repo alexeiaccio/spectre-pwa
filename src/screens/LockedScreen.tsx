@@ -23,7 +23,7 @@ export default function LockedScreen(props: {
       <div class="flex flex-col gap-2">
         <TextFieldRoot>
           <TextFieldInput
-            class="tap rounded border border-surface-700 bg-surface-800 px-2 py-1 text-sm text-slate-100"
+            class="tap w-full rounded border border-surface-700 bg-surface-800 px-2 py-1 text-sm text-slate-100"
             value={code()}
             onInput={(e) => setCode((e.target as HTMLInputElement).value)}
             placeholder="recovery code"

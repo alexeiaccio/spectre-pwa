@@ -10,8 +10,8 @@ import {
 
 const encoder = new TextEncoder()
 
-/** Copy into a fresh ArrayBuffer so TS 6.0's BufferSource accepts it. */
-const toBuf = (u: Uint8Array): ArrayBuffer => u.slice().buffer as ArrayBuffer
+/** Copy into a fresh ArrayBuffer so BufferSource accepts it. */
+const toBuf = (u: Uint8Array): ArrayBuffer => u.slice().buffer
 
 export interface UserKey {
   key: Uint8Array
@@ -64,19 +64,21 @@ export function siteKeySalt(
 
   const len = version < 2 ? siteName.length : site.length
   const size =
-    scope.length +
-    4 + site.length +
-    4 +
-    (context ? 4 + context.length : 0)
+    scope.length + 4 + site.length + 4 + (context ? 4 + context.length : 0)
   const salt = new Uint8Array(size)
   const view = new DataView(salt.buffer)
   let off = 0
-  salt.set(scope, off); off += scope.length
-  view.setUint32(off, len, false); off += 4
-  salt.set(site, off); off += site.length
-  view.setInt32(off, keyCounter, false); off += 4
+  salt.set(scope, off)
+  off += scope.length
+  view.setUint32(off, len, false)
+  off += 4
+  salt.set(site, off)
+  off += site.length
+  view.setInt32(off, keyCounter, false)
+  off += 4
   if (context) {
-    view.setUint32(off, context.length, false); off += 4
+    view.setUint32(off, context.length, false)
+    off += 4
     salt.set(context, off)
   }
   return salt
@@ -92,7 +94,13 @@ export async function newSiteKey(
   keyPurpose: Purpose = 'authentication',
   keyContext: string | null = null,
 ): Promise<SiteKey> {
-  const salt = siteKeySalt(userKey.version, siteName, keyCounter, keyPurpose, keyContext)
+  const salt = siteKeySalt(
+    userKey.version,
+    siteName,
+    keyCounter,
+    keyPurpose,
+    keyContext,
+  )
   const key = await hmacSha256(userKey.key, salt)
   return { key, version: userKey.version }
 }
@@ -101,7 +109,11 @@ export async function newSiteKey(
  * Render the password from a site key against a template.
  * V0 translates each site-key byte into a 16-bit big-endian number first.
  */
-export function renderSiteKey(key: Uint8Array, version: AlgorithmVersion, resultType: number): string {
+export function renderSiteKey(
+  key: Uint8Array,
+  version: AlgorithmVersion,
+  resultType: number,
+): string {
   const templates = TEMPLATES[resultType]
   if (!templates) throw new Error(`Unsupported result template: ${resultType}`)
 
@@ -123,7 +135,16 @@ export function renderSiteKey(key: Uint8Array, version: AlgorithmVersion, result
   return out
 }
 
-async function hmacSha256(key: Uint8Array, msg: Uint8Array): Promise<Uint8Array> {
-  const k = await crypto.subtle.importKey('raw', toBuf(key), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+async function hmacSha256(
+  key: Uint8Array,
+  msg: Uint8Array,
+): Promise<Uint8Array> {
+  const k = await crypto.subtle.importKey(
+    'raw',
+    toBuf(key),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  )
   return new Uint8Array(await crypto.subtle.sign('HMAC', k, toBuf(msg)))
 }

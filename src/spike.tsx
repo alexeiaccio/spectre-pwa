@@ -41,7 +41,7 @@ function App() {
       setStatus('starting-node')
       log(`node ${ROLE}: endpoint bind (n0 relay)…`)
       node = await SyncNode.start()
-      // oxlint-disable-next-line eslint/no-underscore-dangle
+      // oxlint-disable-next-line eslint/no-underscore-dangle, typescript/no-unsafe-type-assertion
       ;(window as unknown as { __spikeNode: SyncNode | null }).__spikeNode =
         node
       setStatus('ready')
@@ -87,7 +87,7 @@ function App() {
       // start_sync until the engine's sync attempt lands.
       const id = await node.join_and_sync(ticket())
       log(`B: imported ticket; doc ${id.slice(0, 16)}…`)
-      node
+      void node
         .subscribe(id, (v: unknown) => {
           const s = String(v)
           if (s.startsWith('SYNC:') || s.startsWith('NEIGHBOR_UP:')) {

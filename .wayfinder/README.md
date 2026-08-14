@@ -9,6 +9,7 @@ Each effort gets its own self-contained directory under `.wayfinder/` (map + `ti
 - **v1 — Spectre Pocket**: `.wayfinder/map.md` (delivered).
 - **Sync — Spectre Pocket Sync**: `.wayfinder/sync/map.md` (in progress).
 - **Routing — navigation seam + DX tooling**: `.wayfinder/routing/map.md` (charting).
+- **S6 — vault-store migration to sync records**: `.wayfinder/s6/map.md` (charting).
 - **Kobalte — form components adoption**: `.wayfinder/kobalte/map.md` (in progress).
 
 ## Where things live

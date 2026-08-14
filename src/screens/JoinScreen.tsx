@@ -20,7 +20,7 @@ import {
   encodeRecordDoc,
   envelopeKey,
   type DeviceEnvelope,
-  type IdentityRecord,
+  type SyncRecord,
 } from '../lib/sync/types.ts'
 import { createPasskeyWithPrf } from '../lib/vault/passkey.ts'
 import type { AesKey } from '../lib/vault/crypto-dek.ts'
@@ -54,8 +54,9 @@ const waitForValue = (
 export default function JoinScreen(props: {
   vaultStatus: () => VaultStatus
   onComplete: (joined: {
+    deviceId: string
     envelope: Envelope
-    vault: Vault
+    records: Map<string, SyncRecord>
     dek: AesKey
   }) => Promise<Vault | undefined>
   onBack: () => void
@@ -69,7 +70,7 @@ export default function JoinScreen(props: {
   let sync: SyncAdapter | null = null
   let docId = ''
   let hostEnvelope: DeviceEnvelope | null = null
-  let hostRecords = new Map<string, IdentityRecord>()
+  let hostRecords = new Map<string, SyncRecord>()
 
   const startJoin = async (): Promise<void> => {
     setError(null)
@@ -172,12 +173,11 @@ export default function JoinScreen(props: {
         envelopeKey(deviceId),
         encodeEnvelopeDoc(joined.envelope),
       )
-      // Complete locally: adopt the joined vault under DEK-B.
-      const vault: Vault = { formatVersion: 1, identities: joined.identities }
-      const envelope: Envelope = { version: 1, deks: joined.envelope.deks }
+      // Complete locally: adopt the joined records + envelope under DEK-B.
       const result = await props.onComplete({
-        envelope,
-        vault,
+        deviceId: joined.envelope.deviceId,
+        envelope: { version: 1, deks: joined.envelope.deks },
+        records: joined.records,
         dek: joined.dek,
       })
       if (!result) setError('could not save the joined vault')
@@ -256,7 +256,7 @@ export default function JoinScreen(props: {
         </p>
         <TextFieldRoot>
           <TextFieldInput
-            class="tap rounded border border-surface-700 bg-surface-800 px-2 py-1 text-sm text-slate-100"
+            class="tap w-full rounded border border-surface-700 bg-surface-800 px-2 py-1 text-sm text-slate-100"
             value={code()}
             onInput={(e) => setCode((e.target as HTMLInputElement).value)}
             placeholder="recovery code"

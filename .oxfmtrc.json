@@ -1,0 +1,25 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "printWidth": 80,
+  "semi": false,
+  "singleQuote": true,
+  "trailingComma": "all",
+  "sortTailwindcss": {
+    "stylesheet": "./src/index.css"
+  },
+  "ignorePatterns": [
+    "dist/**",
+    "node_modules/**",
+    "public/**",
+    ".playwright-mcp/**",
+    ".wayfinder/**",
+    ".wrangler/**",
+    "crates/**",
+    "src/lib/spike/**",
+    "index.html",
+    "spike.html",
+    "wrangler.toml",
+    "package-lock.json",
+    "CONTEXT.md"
+  ]
+}

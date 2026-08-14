@@ -1,71 +1,286 @@
-import { Context, Effect, Layer } from 'effect'
-import { DB_NAME, ENVELOPE_STORE, VAULT_STORE, PREFS_STORE, type Envelope, type Prefs, type VaultBlob } from './schema.ts'
+import { Context, Effect, Layer, Schema } from 'effect'
+import type { SyncRecord } from '../sync/types.ts'
+import {
+  DB_NAME,
+  ENVELOPE_STORE,
+  META_STORE,
+  NODE_STORE,
+  PREFS_STORE,
+  RECORDS_STORE,
+  VAULT_STORE,
+  type Envelope,
+  type MetaState,
+  type NodeIdentity,
+  type Prefs,
+  type VaultBlob,
+} from './schema.ts'
 
-export class VaultStorageError extends Error {
-  readonly _tag = 'VaultStorageError'
-  constructor(message: string) {
-    super(message)
-  }
-}
+export class VaultStorageError extends Schema.TaggedError<VaultStorageError>()(
+  'VaultStorageError',
+  { message: Schema.String },
+) {}
 
 const open = (): Effect.Effect<IDBDatabase, VaultStorageError> =>
-  Effect.tryPromise(
-    () =>
-      new Promise<IDBDatabase>((resolve, reject) => {
-        const req = indexedDB.open(DB_NAME, 2)
-        req.onupgradeneeded = () => {
-          const db = req.result
-          if (!db.objectStoreNames.contains(ENVELOPE_STORE)) {
-            db.createObjectStore(ENVELOPE_STORE)
-          }
-          if (!db.objectStoreNames.contains(VAULT_STORE)) {
-            db.createObjectStore(VAULT_STORE)
-          }
-          if (!db.objectStoreNames.contains(PREFS_STORE)) {
-            db.createObjectStore(PREFS_STORE)
-          }
+  Effect.callback<IDBDatabase, VaultStorageError>((resume) => {
+    const req = indexedDB.open(DB_NAME, 3)
+    req.onupgradeneeded = () => {
+      const db = req.result
+      for (const store of [ENVELOPE_STORE, VAULT_STORE, PREFS_STORE]) {
+        if (!db.objectStoreNames.contains(store)) {
+          db.createObjectStore(store)
         }
-        req.onsuccess = () => resolve(req.result)
-        req.onerror = () => reject(req.error)
-      }),
-  ).pipe(Effect.mapError(() => new VaultStorageError('open failed')))
+      }
+      // v3 stores; the v1 `vault` store is kept until the app-level migration.
+      for (const store of [RECORDS_STORE, NODE_STORE, META_STORE]) {
+        if (!db.objectStoreNames.contains(store)) {
+          db.createObjectStore(store)
+        }
+      }
+    }
+    req.addEventListener('success', () => resume(Effect.succeed(req.result)))
+    req.addEventListener('error', () =>
+      resume(Effect.fail(new VaultStorageError({ message: 'open failed' }))),
+    )
+  })
 
-function idb<T>(op: (db: IDBDatabase) => IDBRequest<T>): Effect.Effect<T, VaultStorageError> {
+function idb<T>(
+  op: (db: IDBDatabase) => IDBRequest<T>,
+): Effect.Effect<T, VaultStorageError> {
   return Effect.flatMap(open(), (db) =>
-    Effect.tryPromise(
-      () =>
-        new Promise<T>((resolve, reject) => {
-          const req = op(db)
-          req.onsuccess = () => resolve(req.result)
-          req.onerror = () => reject(req.error)
-        }).finally(() => db.close()),
-    ).pipe(Effect.mapError(() => new VaultStorageError('request failed'))),
+    Effect.callback<T, VaultStorageError>((resume) => {
+      const req = op(db)
+      req.addEventListener('success', () => {
+        db.close()
+        resume(Effect.succeed(req.result))
+      })
+      req.addEventListener('error', () => {
+        db.close()
+        resume(
+          Effect.fail(new VaultStorageError({ message: 'request failed' })),
+        )
+      })
+    }),
   )
 }
 
-export const readEnvelope = (): Effect.Effect<Envelope | undefined, VaultStorageError> =>
-  idb((db) => db.transaction(ENVELOPE_STORE, 'readonly').objectStore(ENVELOPE_STORE).get('root'))
+/** Run a readwrite transaction over several stores; resolves on `complete`. */
+function idbTx(
+  stores: string[],
+  run: (tx: IDBTransaction) => void,
+): Effect.Effect<void, VaultStorageError> {
+  return Effect.flatMap(open(), (db) =>
+    Effect.callback<void, VaultStorageError>((resume) => {
+      const tx = db.transaction(stores, 'readwrite')
+      run(tx)
+      tx.addEventListener('complete', () => {
+        db.close()
+        resume(Effect.void)
+      })
+      tx.addEventListener('error', () => {
+        db.close()
+        resume(
+          Effect.fail(new VaultStorageError({ message: 'transaction failed' })),
+        )
+      })
+      tx.addEventListener('abort', () => {
+        db.close()
+        resume(
+          Effect.fail(
+            new VaultStorageError({ message: 'transaction aborted' }),
+          ),
+        )
+      })
+    }),
+  )
+}
 
-export const writeEnvelope = (envelope: Envelope): Effect.Effect<void, VaultStorageError> =>
-  idb((db) => db.transaction(ENVELOPE_STORE, 'readwrite').objectStore(ENVELOPE_STORE).put(envelope, 'root')).pipe(
-    Effect.as(undefined),
+export const readEnvelope = (): Effect.Effect<
+  Envelope | undefined,
+  VaultStorageError
+> =>
+  idb((db) =>
+    db
+      .transaction(ENVELOPE_STORE, 'readonly')
+      .objectStore(ENVELOPE_STORE)
+      .get('root'),
   )
 
-export const readVaultBlob = (): Effect.Effect<VaultBlob | undefined, VaultStorageError> =>
-  idb((db) => db.transaction(VAULT_STORE, 'readonly').objectStore(VAULT_STORE).get('ciphertext'))
+export const writeEnvelope = (
+  envelope: Envelope,
+): Effect.Effect<void, VaultStorageError> =>
+  idb((db) =>
+    db
+      .transaction(ENVELOPE_STORE, 'readwrite')
+      .objectStore(ENVELOPE_STORE)
+      .put(envelope, 'root'),
+  ).pipe(Effect.as(undefined))
 
-export const writeVaultBlob = (blob: VaultBlob): Effect.Effect<void, VaultStorageError> =>
-  idb((db) => db.transaction(VAULT_STORE, 'readwrite').objectStore(VAULT_STORE).put(blob, 'ciphertext')).pipe(
-    Effect.as(undefined),
+export const readVaultBlob = (): Effect.Effect<
+  VaultBlob | undefined,
+  VaultStorageError
+> =>
+  idb((db) =>
+    db
+      .transaction(VAULT_STORE, 'readonly')
+      .objectStore(VAULT_STORE)
+      .get('ciphertext'),
   )
 
-export const readPrefs = (): Effect.Effect<Prefs | undefined, VaultStorageError> =>
-  idb((db) => db.transaction(PREFS_STORE, 'readonly').objectStore(PREFS_STORE).get('root'))
+export const writeVaultBlob = (
+  blob: VaultBlob,
+): Effect.Effect<void, VaultStorageError> =>
+  idb((db) =>
+    db
+      .transaction(VAULT_STORE, 'readwrite')
+      .objectStore(VAULT_STORE)
+      .put(blob, 'ciphertext'),
+  ).pipe(Effect.as(undefined))
 
-export const writePrefs = (prefs: Prefs): Effect.Effect<void, VaultStorageError> =>
-  idb((db) => db.transaction(PREFS_STORE, 'readwrite').objectStore(PREFS_STORE).put(prefs, 'root')).pipe(
-    Effect.as(undefined),
+export const readPrefs = (): Effect.Effect<
+  Prefs | undefined,
+  VaultStorageError
+> =>
+  idb((db) =>
+    db
+      .transaction(PREFS_STORE, 'readonly')
+      .objectStore(PREFS_STORE)
+      .get('root'),
   )
+
+export const writePrefs = (
+  prefs: Prefs,
+): Effect.Effect<void, VaultStorageError> =>
+  idb((db) =>
+    db
+      .transaction(PREFS_STORE, 'readwrite')
+      .objectStore(PREFS_STORE)
+      .put(prefs, 'root'),
+  ).pipe(Effect.as(undefined))
+
+// --- v3 mirror helpers ---
+
+export const readRecord = (
+  identityId: string,
+): Effect.Effect<SyncRecord | undefined, VaultStorageError> =>
+  idb((db) =>
+    db
+      .transaction(RECORDS_STORE, 'readonly')
+      .objectStore(RECORDS_STORE)
+      .get(identityId),
+  )
+
+export const writeRecord = (
+  identityId: string,
+  record: SyncRecord,
+): Effect.Effect<void, VaultStorageError> =>
+  idbTx([RECORDS_STORE], (tx) => {
+    tx.objectStore(RECORDS_STORE).put(record, identityId)
+  })
+
+export const writeRecords = (
+  entries: Iterable<readonly [string, SyncRecord]>,
+): Effect.Effect<void, VaultStorageError> =>
+  idbTx([RECORDS_STORE], (tx) => {
+    const store = tx.objectStore(RECORDS_STORE)
+    for (const [id, record] of entries) store.put(record, id)
+  })
+
+export const getAllRecords = (): Effect.Effect<
+  Array<readonly [string, SyncRecord]>,
+  VaultStorageError
+> =>
+  Effect.flatMap(open(), (db) =>
+    Effect.callback<Array<readonly [string, SyncRecord]>, VaultStorageError>(
+      (resume) => {
+        const store = db
+          .transaction(RECORDS_STORE, 'readonly')
+          .objectStore(RECORDS_STORE)
+        const keysReq = store.getAllKeys()
+        const valsReq = store.getAll()
+        let keys: IDBValidKey[] = []
+        let vals: SyncRecord[] = []
+        const done = (): void => {
+          db.close()
+          resume(
+            Effect.succeed(
+              keys.map(
+                (k, i) => [String(k), vals[i]] as readonly [string, SyncRecord],
+              ),
+            ),
+          )
+        }
+        keysReq.addEventListener('success', () => {
+          keys = keysReq.result
+          if (keysReq.readyState === 'done' && valsReq.readyState === 'done')
+            done()
+        })
+        valsReq.addEventListener('success', () => {
+          vals = valsReq.result as SyncRecord[]
+          if (keysReq.readyState === 'done' && valsReq.readyState === 'done')
+            done()
+        })
+      },
+    ),
+  )
+
+export const readDeviceEnvelope = (
+  deviceId: string,
+): Effect.Effect<Envelope | undefined, VaultStorageError> =>
+  idb((db) =>
+    db
+      .transaction(ENVELOPE_STORE, 'readonly')
+      .objectStore(ENVELOPE_STORE)
+      .get(deviceId),
+  )
+
+export const writeDeviceEnvelope = (
+  deviceId: string,
+  envelope: Envelope,
+): Effect.Effect<void, VaultStorageError> =>
+  idbTx([ENVELOPE_STORE], (tx) => {
+    tx.objectStore(ENVELOPE_STORE).put(envelope, deviceId)
+  })
+
+export const readMeta = (): Effect.Effect<
+  MetaState | undefined,
+  VaultStorageError
+> =>
+  idb((db) =>
+    db.transaction(META_STORE, 'readonly').objectStore(META_STORE).get('state'),
+  )
+
+export const writeMeta = (
+  meta: MetaState,
+): Effect.Effect<void, VaultStorageError> =>
+  idbTx([META_STORE], (tx) => {
+    tx.objectStore(META_STORE).put(meta, 'state')
+  })
+
+export const readNodeIdentity = (): Effect.Effect<
+  NodeIdentity | undefined,
+  VaultStorageError
+> =>
+  idb((db) =>
+    db.transaction(NODE_STORE, 'readonly').objectStore(NODE_STORE).get('node'),
+  )
+
+export const writeNodeIdentity = (
+  node: NodeIdentity,
+): Effect.Effect<void, VaultStorageError> =>
+  idbTx([NODE_STORE], (tx) => {
+    tx.objectStore(NODE_STORE).put(node, 'node')
+  })
+
+/** True iff the legacy v1 blob is still present (a v2 vault awaiting migration). */
+export const hasLegacyVault = (): Effect.Effect<boolean, VaultStorageError> =>
+  Effect.map(readVaultBlob(), (blob) => blob !== undefined)
+
+/** Clear the v1 data after migration (best-effort cleanup, post-commit). */
+export const clearLegacyData = (): Effect.Effect<void, VaultStorageError> =>
+  idbTx([VAULT_STORE, ENVELOPE_STORE], (tx) => {
+    tx.objectStore(VAULT_STORE).delete('ciphertext')
+    tx.objectStore(ENVELOPE_STORE).delete('root')
+  })
 
 // --- Service layer (Effect v4 function-style key) ---
 
@@ -76,9 +291,43 @@ export interface VaultStorageService {
   writeVaultBlob: (blob: VaultBlob) => Effect.Effect<void, VaultStorageError>
   readPrefs: () => Effect.Effect<Prefs | undefined, VaultStorageError>
   writePrefs: (prefs: Prefs) => Effect.Effect<void, VaultStorageError>
+  readRecord: (
+    id: string,
+  ) => Effect.Effect<SyncRecord | undefined, VaultStorageError>
+  writeRecord: (
+    id: string,
+    record: SyncRecord,
+  ) => Effect.Effect<void, VaultStorageError>
+  writeRecords: (
+    entries: Iterable<readonly [string, SyncRecord]>,
+  ) => Effect.Effect<void, VaultStorageError>
+  getAllRecords: () => Effect.Effect<
+    Array<readonly [string, SyncRecord]>,
+    VaultStorageError
+  >
+  readDeviceEnvelope: (
+    deviceId: string,
+  ) => Effect.Effect<Envelope | undefined, VaultStorageError>
+  writeDeviceEnvelope: (
+    deviceId: string,
+    envelope: Envelope,
+  ) => Effect.Effect<void, VaultStorageError>
+  readMeta: () => Effect.Effect<MetaState | undefined, VaultStorageError>
+  writeMeta: (meta: MetaState) => Effect.Effect<void, VaultStorageError>
+  readNodeIdentity: () => Effect.Effect<
+    NodeIdentity | undefined,
+    VaultStorageError
+  >
+  writeNodeIdentity: (
+    node: NodeIdentity,
+  ) => Effect.Effect<void, VaultStorageError>
+  hasLegacyVault: () => Effect.Effect<boolean, VaultStorageError>
+  clearLegacyData: () => Effect.Effect<void, VaultStorageError>
 }
 
-export const VaultStorageService = Context.Service<VaultStorageService>('VaultStorageService')
+export const VaultStorageService = Context.Service<VaultStorageService>(
+  'VaultStorageService',
+)
 
 export const VaultStorageLive = Layer.succeed(VaultStorageService, {
   readEnvelope,
@@ -87,4 +336,16 @@ export const VaultStorageLive = Layer.succeed(VaultStorageService, {
   writeVaultBlob,
   readPrefs,
   writePrefs,
+  readRecord,
+  writeRecord,
+  writeRecords,
+  getAllRecords,
+  readDeviceEnvelope,
+  writeDeviceEnvelope,
+  readMeta,
+  writeMeta,
+  readNodeIdentity,
+  writeNodeIdentity,
+  hasLegacyVault,
+  clearLegacyData,
 })

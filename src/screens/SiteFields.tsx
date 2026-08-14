@@ -62,17 +62,17 @@ function MiniSelect<
       itemComponent={(p) => (
         <SelectItem
           item={p.item}
-          class="flex tap items-center justify-between gap-2 px-3 py-2 text-sm text-slate-100 data-[highlighted]:bg-surface-700 data-[selected]:text-black"
+          class="flex tap items-center justify-between gap-2 px-3 py-2 text-sm text-slate-100 data-[highlighted]:bg-white data-[highlighted]:text-black"
         >
           <SelectItemLabel>{p.item.rawValue.label}</SelectItemLabel>
         </SelectItem>
       )}
     >
-      <SelectTrigger class="flex tap items-center justify-between gap-2 rounded border border-surface-700 bg-surface-800 px-2 py-1 text-sm text-slate-100">
+      <SelectTrigger class="flex tap w-full min-w-0 items-center justify-between gap-2 rounded border border-surface-700 bg-surface-800 px-2 py-1 text-sm text-slate-100">
         <SelectValue<T>>
           {(state) => state.selectedOption()?.label ?? '…'}
         </SelectValue>
-        <span class="text-xs text-slate-500">▾</span>
+        <span class="shrink-0 text-xs text-slate-500">▾</span>
       </SelectTrigger>
       <SelectPortal>
         <SelectContent class="z-10 min-w-[10rem] overflow-hidden rounded border border-surface-700 bg-surface-800 p-1 shadow-lg">
@@ -109,7 +109,7 @@ export function SiteFields(props: {
     <>
       <TextFieldRoot>
         <TextFieldInput
-          class="tap rounded border border-surface-700 bg-surface-800 px-2 py-1 text-sm text-slate-100"
+          class="tap w-full rounded border border-surface-700 bg-surface-800 px-2 py-1 text-sm text-slate-100"
           value={props.draft.name}
           onInput={(e) =>
             props.setDraft((d) => ({
@@ -120,30 +120,34 @@ export function SiteFields(props: {
           placeholder={props.namePlaceholder}
         />
       </TextFieldRoot>
-      <div class="flex gap-2">
-        <MiniSelect
-          options={PURPOSE_OPTIONS}
-          value={
-            PURPOSE_OPTIONS.find((o) => o.value === props.draft.purpose) ??
-            PURPOSE_OPTIONS[0]
-          }
-          onChange={(opt) => {
-            const purpose = opt.value
-            const template =
-              purpose === 'login' ? 30 : purpose === 'answer' ? 31 : 17
-            props.setDraft((d) => ({ ...d, purpose, template }))
-          }}
-        />
-        <MiniSelect
-          options={TEMPLATE_OPTIONS}
-          value={
-            TEMPLATE_OPTIONS.find((o) => o.value === props.draft.template) ??
-            TEMPLATE_OPTIONS[0]
-          }
-          onChange={(opt) =>
-            props.setDraft((d) => ({ ...d, template: opt.value }))
-          }
-        />
+      <div class="flex items-stretch gap-2">
+        <div class="min-w-0 flex-1">
+          <MiniSelect
+            options={PURPOSE_OPTIONS}
+            value={
+              PURPOSE_OPTIONS.find((o) => o.value === props.draft.purpose) ??
+              PURPOSE_OPTIONS[0]
+            }
+            onChange={(opt) => {
+              const purpose = opt.value
+              const template =
+                purpose === 'login' ? 30 : purpose === 'answer' ? 31 : 17
+              props.setDraft((d) => ({ ...d, purpose, template }))
+            }}
+          />
+        </div>
+        <div class="min-w-0 flex-1">
+          <MiniSelect
+            options={TEMPLATE_OPTIONS}
+            value={
+              TEMPLATE_OPTIONS.find((o) => o.value === props.draft.template) ??
+              TEMPLATE_OPTIONS[0]
+            }
+            onChange={(opt) =>
+              props.setDraft((d) => ({ ...d, template: opt.value }))
+            }
+          />
+        </div>
         <NumberFieldRoot
           value={props.draft.counter}
           minValue={1}
@@ -163,7 +167,7 @@ export function SiteFields(props: {
       <Show when={props.draft.purpose === 'answer'}>
         <TextFieldRoot>
           <TextFieldInput
-            class="tap rounded border border-surface-700 bg-surface-800 px-2 py-1 text-sm text-slate-100"
+            class="tap w-full rounded border border-surface-700 bg-surface-800 px-2 py-1 text-sm text-slate-100"
             value={props.draft.answer}
             onInput={(e) =>
               props.setDraft((d) => ({

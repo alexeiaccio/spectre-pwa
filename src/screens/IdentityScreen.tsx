@@ -202,9 +202,11 @@ export default function IdentityScreen(props: {
           </p>
           <TextFieldRoot>
             <TextFieldInput
-              class="tap rounded border border-surface-700 bg-surface-800 px-2 py-1 text-sm text-slate-100"
+              class="tap w-full rounded border border-surface-700 bg-surface-800 px-2 py-1 text-sm text-slate-100"
               value={passphrase()}
-              onInput={(e) => setPassphrase((e.target as HTMLInputElement).value)}
+              onInput={(e) =>
+                setPassphrase((e.target as HTMLInputElement).value)
+              }
               placeholder="Spectre passphrase"
               type="password"
             />

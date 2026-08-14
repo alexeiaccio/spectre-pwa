@@ -36,7 +36,11 @@ import LockedScreen from './screens/LockedScreen.tsx'
 import ErrorScreen from './screens/ErrorScreen.tsx'
 import IdentitiesScreen from './screens/IdentitiesScreen.tsx'
 import IdentityScreen from './screens/IdentityScreen.tsx'
+import JoinScreen from './screens/JoinScreen.tsx'
+import MigratingScreen from './screens/MigratingScreen.tsx'
 import type { SiteFormState } from './screens/SiteFields.tsx'
+import { getSyncAdapter } from './lib/sync/adapter.ts'
+import { shareVaultDoc } from './lib/sync/pairing.ts'
 
 const uid = (): string =>
   crypto.randomUUID?.() ??
@@ -59,11 +63,7 @@ function ScreenShell() {
   const navigate = useNavigate()
 
   const derivation = createMemo(() =>
-    deriveScreen(
-      api.vault.status(),
-      api.session.status(),
-      location.pathname,
-    ),
+    deriveScreen(api.vault.status(), api.session.status(), location.pathname),
   )
   createEffect(
     () => derivation().redirect,
@@ -87,17 +87,36 @@ function ScreenShell() {
     const s = screen()
     return s.view === 'locked' ? s : undefined
   })
+  const migrating = createMemo(() => {
+    const s = screen()
+    return s.view === 'migrating' ? s : undefined
+  })
   const error = createMemo(() => {
     const s = screen()
     return s.view === 'error' ? s : undefined
   })
-  const identities = createMemo(() => {
+  const identitiesCase = createMemo(() => {
     const s = screen()
     return s.view === 'identities' ? s : undefined
   })
-  const identity = createMemo(() => {
+  const identityCase = createMemo(() => {
     const s = screen()
     return s.view === 'identity' ? s : undefined
+  })
+  const joinCase = createMemo(() => {
+    const s = screen()
+    return s.view === 'join' ? s : undefined
+  })
+  // The vault-backed render data, wrapped in memos so <Match> never reads a
+  // signal directly (Solid 2 rc STRICT_READ_UNTRACKED).
+  const identitiesVault = createMemo(() =>
+    identitiesCase() ? api.vaultValue() : undefined,
+  )
+  const identityDetail = createMemo(() => {
+    const s = identityCase()
+    if (!s) return undefined
+    const found = api.vaultValue()?.identities.find((i) => i.id === s.id)
+    return found ? { s, found } : undefined
   })
 
   const onSaveIdentity = async (
@@ -191,7 +210,10 @@ function ScreenShell() {
       </Match>
       <Match when={setup()} keyed>
         {() => (
-          <SetupScreen onSubmit={(code) => void api.vault.setup(code)} />
+          <SetupScreen
+            onSubmit={(code) => void api.vault.setup(code)}
+            onJoin={() => navigate('/join')}
+          />
         )}
       </Match>
       <Match when={locked()} keyed>
@@ -199,6 +221,17 @@ function ScreenShell() {
           <LockedScreen
             onPasskey={() => void api.vault.unlock()}
             onRecovery={(code) => void api.vault.unlockWithRecovery(code)}
+            onJoin={() => navigate('/join')}
+          />
+        )}
+      </Match>
+      <Match when={migrating()} keyed>
+        {() => (
+          <MigratingScreen
+            onMigratePasskey={() => void api.vault.migrate({ kind: 'passkey' })}
+            onMigrateRecovery={(code) =>
+              void api.vault.migrate({ kind: 'recovery', code })
+            }
           />
         )}
       </Match>
@@ -210,46 +243,50 @@ function ScreenShell() {
           />
         )}
       </Match>
-      <Match when={identities()} keyed>
-        {() => {
-          const v = api.vaultValue()
-          return v ? (
-            <IdentitiesScreen
-              vault={v}
-              prefs={api.vault.prefs}
-              onSelect={(id) => navigate(`/identity/${id}`)}
-              onSaveIdentity={(fullName, passphrase) =>
-                void onSaveIdentity(fullName, passphrase)
-              }
-              onDeleteIdentity={(identity) => void onDeleteIdentity(identity)}
-              onReEnroll={(code) => api.vault.reEnrollPasskey(code)}
-              onSetAutoLock={(minutes) => void api.vault.setAutoLockMinutes(minutes)}
-            />
-          ) : null
-        }}
+      <Match when={joinCase()} keyed>
+        {() => (
+          <JoinScreen
+            vaultStatus={api.vault.status}
+            onComplete={(joined) => api.vault.importJoined(joined)}
+            onBack={() => navigate('/')}
+          />
+        )}
       </Match>
-      <Match when={identity()} keyed>
-        {(s) => {
-          const identity = api
-            .vaultValue()
-            ?.identities.find((i) => i.id === s.id)
-          return identity ? (
-            <IdentityScreen
-              identity={identity}
-              sessionStatus={api.session.status}
-              sessionIdentityId={api.session.identityId}
-              onUnlockIdentity={onUnlockIdentity}
-              onBack={onBack}
-              onLockSession={api.session.lock}
-              onDerive={onDerive}
-              onAddSite={(id, site) => void onAddSite(id, site)}
-              onUpdateSite={(id, site, draft) =>
-                void onUpdateSite(id, site, draft)
-              }
-              onDeleteSite={(id, siteId) => void onDeleteSite(id, siteId)}
-            />
-          ) : null
-        }}
+      <Match when={identitiesVault()} keyed>
+        {(v) => (
+          <IdentitiesScreen
+            vault={v}
+            prefs={api.vault.prefs}
+            onSelect={(id) => navigate(`/identity/${id}`)}
+            onSaveIdentity={(fullName, passphrase) =>
+              void onSaveIdentity(fullName, passphrase)
+            }
+            onDeleteIdentity={(identity) => void onDeleteIdentity(identity)}
+            onReEnroll={(code) => api.vault.reEnrollPasskey(code)}
+            onSetAutoLock={(minutes) =>
+              void api.vault.setAutoLockMinutes(minutes)
+            }
+            onCreateInvitation={() => shareVaultDoc(getSyncAdapter())}
+          />
+        )}
+      </Match>
+      <Match when={identityDetail()} keyed>
+        {(detail) => (
+          <IdentityScreen
+            identity={detail.found}
+            sessionStatus={api.session.status}
+            sessionIdentityId={api.session.identityId}
+            onUnlockIdentity={onUnlockIdentity}
+            onBack={onBack}
+            onLockSession={api.session.lock}
+            onDerive={onDerive}
+            onAddSite={(id, site) => void onAddSite(id, site)}
+            onUpdateSite={(id, site, draft) =>
+              void onUpdateSite(id, site, draft)
+            }
+            onDeleteSite={(id, siteId) => void onDeleteSite(id, siteId)}
+          />
+        )}
       </Match>
     </Switch>
   )
@@ -260,6 +297,7 @@ const Router = createRouter({
     { path: '/', component: ScreenShell },
     { path: '/setup', component: ScreenShell },
     { path: '/locked', component: ScreenShell },
+    { path: '/join', component: ScreenShell },
     { path: '/identity/:uuid', component: ScreenShell },
     { path: '/*', component: ScreenShell },
   ]),
@@ -301,8 +339,7 @@ export default function App(props: AppProps = {}) {
   useLockLifecycle(
     allLock,
     () =>
-      vault.status().kind === 'unlocked' ||
-      session.status().kind === 'ready',
+      vault.status().kind === 'unlocked' || session.status().kind === 'ready',
     () => vault.prefs().autoLockMinutes * 60_000,
   )
 

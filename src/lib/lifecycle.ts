@@ -8,7 +8,11 @@ import { onCleanup } from 'solid-js'
  *
  * Reads no signals at setup time — handlers capture current state when they run.
  */
-export function useLockLifecycle(onLock: () => void, isOpen: () => boolean, graceMs: () => number) {
+export function useLockLifecycle(
+  onLock: () => void,
+  isOpen: () => boolean,
+  graceMs: () => number,
+) {
   let hiddenAt: number | null = null
 
   const onVisibility = (): void => {
@@ -40,10 +44,14 @@ export function useLockLifecycle(onLock: () => void, isOpen: () => boolean, grac
 /** ~30s self-clearing clipboard copy. Best-effort: only works while page is focused. */
 export function copyWithAutoClear(value: string): void {
   const w = navigator.clipboard?.writeText(value)
-  if (w) void w.then(() => {
-    if (clipboardTimer !== null) clearTimeout(clipboardTimer)
-    clipboardTimer = window.setTimeout(() => void navigator.clipboard?.writeText(''), 30_000)
-  })
+  if (w)
+    void w.then(() => {
+      if (clipboardTimer !== null) clearTimeout(clipboardTimer)
+      clipboardTimer = window.setTimeout(
+        () => void navigator.clipboard?.writeText(''),
+        30_000,
+      )
+    })
 }
 
 /** Clears the pending clipboard wipe (e.g. on lock) — hygiene, not a guarantee. */

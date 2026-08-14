@@ -144,6 +144,18 @@ export class SyncNode {
         return ret;
     }
     /**
+     * Dial the peers from a ticket using their relay addresses (no address-lookup
+     * dependency) and hold the connections. Returns the number connected.
+     * @param {string} ticket_str
+     * @returns {Promise<string>}
+     */
+    connect_peer(ticket_str) {
+        const ptr0 = passStringToWasm0(ticket_str, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.syncnode_connect_peer(this.__wbg_ptr, ptr0, len0);
+        return ret;
+    }
+    /**
      * Create a new empty doc, start sync on it, return the share ticket.
      * @returns {Promise<string>}
      */
@@ -177,6 +189,37 @@ export class SyncNode {
         }
     }
     /**
+     * Export the default author's 32 bytes as hex, so record edits keep a stable
+     * author identity across reloads (persist it and re-import on boot).
+     * @returns {Promise<string>}
+     */
+    export_default_author() {
+        const ret = wasm.syncnode_export_default_author(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * Export this node's SecretKey as hex (32 bytes). Call once, store in IndexedDB.
+     * @returns {string}
+     */
+    export_secret_key() {
+        let deferred2_0;
+        let deferred2_1;
+        try {
+            const ret = wasm.syncnode_export_secret_key(this.__wbg_ptr);
+            var ptr1 = ret[0];
+            var len1 = ret[1];
+            if (ret[3]) {
+                ptr1 = 0; len1 = 0;
+                throw takeFromExternrefTable0(ret[2]);
+            }
+            deferred2_0 = ptr1;
+            deferred2_1 = len1;
+            return getStringFromWasm0(ptr1, len1);
+        } finally {
+            wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+        }
+    }
+    /**
      * Read the latest value for a key, or null.
      * @param {string} doc_id
      * @param {string} key
@@ -191,7 +234,20 @@ export class SyncNode {
         return ret;
     }
     /**
-     * Import a doc from a share ticket, join its peers, and start syncing.
+     * Import a 32-byte author (hex) and make it the node's default author.
+     * @param {string} author_hex
+     * @returns {Promise<void>}
+     */
+    import_default_author(author_hex) {
+        const ptr0 = passStringToWasm0(author_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.syncnode_import_default_author(this.__wbg_ptr, ptr0, len0);
+        return ret;
+    }
+    /**
+     * Import a doc from a share ticket, dial its peers over the docs ALPN using the
+     * relay address embedded in the ticket (no address-lookup dependency), hold the
+     * connections (iroh reuses them for the engine's own dial), then start syncing.
      * @param {string} ticket_str
      * @returns {Promise<string>}
      */
@@ -199,6 +255,19 @@ export class SyncNode {
         const ptr0 = passStringToWasm0(ticket_str, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
         const ret = wasm.syncnode_import_ticket(this.__wbg_ptr, ptr0, len0);
+        return ret;
+    }
+    /**
+     * Import + connect peers via relay + retry `start_sync` until a sync attempt lands.
+     * The engine's first dial can fail with "Failed to establish connection" (relay peer
+     * not yet reachable); retrying after the relay connection is established succeeds.
+     * @param {string} ticket_str
+     * @returns {Promise<string>}
+     */
+    join_and_sync(ticket_str) {
+        const ptr0 = passStringToWasm0(ticket_str, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.syncnode_join_and_sync(this.__wbg_ptr, ptr0, len0);
         return ret;
     }
     /**
@@ -245,6 +314,17 @@ export class SyncNode {
         return ret;
     }
     /**
+     * Re-trigger sync with the ticket's peers on an already-imported doc (retry after boot).
+     * @param {string} ticket_str
+     * @returns {Promise<string>}
+     */
+    resync(ticket_str) {
+        const ptr0 = passStringToWasm0(ticket_str, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.syncnode_resync(this.__wbg_ptr, ptr0, len0);
+        return ret;
+    }
+    /**
      * Insert a key/value entry under the default author. Value travels in the
      * entry key (key␀value); content bytes are still written to the blobs store.
      * @param {string} doc_id
@@ -264,6 +344,7 @@ export class SyncNode {
     }
     /**
      * Create a node bound to the n0 public relay + all protocols (blobs, gossip, docs).
+     * Uses a fresh random SecretKey, so the node id changes on every reload.
      * @returns {Promise<SyncNode>}
      */
     static start() {
@@ -271,7 +352,20 @@ export class SyncNode {
         return ret;
     }
     /**
-     * Subscribe to live inserts for one doc; each value arrives as a JS string.
+     * Create a node from a persisted SecretKey (32 bytes, hex-encoded). The same
+     * key always yields the same node id, so the node survives reloads.
+     * @param {string} secret_key_hex
+     * @returns {Promise<SyncNode>}
+     */
+    static start_with_secret_key(secret_key_hex) {
+        const ptr0 = passStringToWasm0(secret_key_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.syncnode_start_with_secret_key(ptr0, len0);
+        return ret;
+    }
+    /**
+     * Subscribe to live events for one doc. Value inserts arrive as plain strings;
+     * sync lifecycle events arrive as "SYNC:<...>" so callers can distinguish them.
      * @param {string} doc_id
      * @param {Function} on_event
      * @returns {Promise<void>}
@@ -836,42 +930,42 @@ function __wbg_get_imports() {
             return ret;
         },
         __wbindgen_cast_0000000000000001: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 4822, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 4846, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen__convert__closures_____invoke__hc2a60248b29eb9e7);
             return ret;
         },
         __wbindgen_cast_0000000000000002: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 6884, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 6908, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen__convert__closures_____invoke__h212a4ab003eb1cd1);
             return ret;
         },
         __wbindgen_cast_0000000000000003: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("CloseEvent")], shim_idx: 4710, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("CloseEvent")], shim_idx: 4734, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen__convert__closures_____invoke__h44f5a8a2e2d741a7);
             return ret;
         },
         __wbindgen_cast_0000000000000004: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("MessageEvent")], shim_idx: 5494, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("MessageEvent")], shim_idx: 5518, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen__convert__closures_____invoke__h639e53a6e437cf0e);
             return ret;
         },
         __wbindgen_cast_0000000000000005: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [], shim_idx: 4802, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [], shim_idx: 4826, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen__convert__closures_____invoke__h32f1caff51ae54e4);
             return ret;
         },
         __wbindgen_cast_0000000000000006: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [], shim_idx: 5030, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [], shim_idx: 5054, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen__convert__closures_____invoke__h57c4011331ce49ce);
             return ret;
         },
         __wbindgen_cast_0000000000000007: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [], shim_idx: 5077, ret: Unit, inner_ret: Some(Unit) }, mutable: false }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [], shim_idx: 5101, ret: Unit, inner_ret: Some(Unit) }, mutable: false }) -> Externref`.
             const ret = makeClosure(arg0, arg1, wasm_bindgen__convert__closures_____invoke__hb932bb66df9e2d58);
             return ret;
         },
         __wbindgen_cast_0000000000000008: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [], shim_idx: 6850, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [], shim_idx: 6874, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen__convert__closures_____invoke__h845894347c7fc9c6);
             return ret;
         },

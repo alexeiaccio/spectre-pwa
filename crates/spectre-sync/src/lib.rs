@@ -9,10 +9,10 @@
 //! (`prefix␀value`), avoiding the blobs content-read API which differs across
 //! iroh-blobs versions. Reconciliation/LWW semantics are iroh-docs' own.
 
-use iroh::{endpoint::presets, protocol::Router, Endpoint};
+use iroh::{endpoint::presets, protocol::Router, Endpoint, SecretKey};
 use iroh_blobs::store::mem::MemStore;
 use iroh_blobs::BlobsProtocol;
-use iroh_docs::{DocTicket, protocol::Docs, store::Query};
+use iroh_docs::{Author, DocTicket, protocol::Docs, store::Query};
 use iroh_gossip::net::Gossip;
 use futures::StreamExt;
 use n0_watcher::Watcher;
@@ -33,16 +33,33 @@ pub struct SyncNode {
 #[wasm_bindgen]
 impl SyncNode {
     /// Create a node bound to the n0 public relay + all protocols (blobs, gossip, docs).
+    /// Uses a fresh random SecretKey, so the node id changes on every reload.
     pub async fn start() -> Result<SyncNode, JsError> {
-        let endpoint = Endpoint::builder(presets::N0)
-            .alpns(vec![
-                iroh_blobs::ALPN.to_vec(),
-                iroh_gossip::ALPN.to_vec(),
-                iroh_docs::ALPN.to_vec(),
-            ])
-            .bind()
-            .await
-            .map_err(to_js)?;
+        Self::start_inner(None).await
+    }
+
+    /// Create a node from a persisted SecretKey (32 bytes, hex-encoded). The same
+    /// key always yields the same node id, so the node survives reloads.
+    pub async fn start_with_secret_key(secret_key_hex: &str) -> Result<SyncNode, JsError> {
+        if secret_key_hex.len() != 64 {
+            return Err(JsError::new("secret key must be exactly 32 bytes, hex-encoded (64 chars)"));
+        }
+        let bytes = decode_hex(secret_key_hex).map_err(to_js)?;
+        let mut key = [0u8; 32];
+        key.copy_from_slice(&bytes);
+        Self::start_inner(Some(SecretKey::from_bytes(&key))).await
+    }
+
+    async fn start_inner(secret_key: Option<SecretKey>) -> Result<SyncNode, JsError> {
+        let mut builder = Endpoint::builder(presets::N0).alpns(vec![
+            iroh_blobs::ALPN.to_vec(),
+            iroh_gossip::ALPN.to_vec(),
+            iroh_docs::ALPN.to_vec(),
+        ]);
+        if let Some(sk) = secret_key {
+            builder = builder.secret_key(sk);
+        }
+        let endpoint = builder.bind().await.map_err(to_js)?;
         let node_id = endpoint.id().to_string();
         let blobs = MemStore::default();
         let gossip = Gossip::builder().spawn(endpoint.clone());
@@ -75,6 +92,38 @@ impl SyncNode {
             }
         }
         Err(JsError::new("relay connection not established after timeout"))
+    }
+
+    /// Export this node's SecretKey as hex (32 bytes). Call once, store in IndexedDB.
+    pub fn export_secret_key(&self) -> Result<String, JsError> {
+        Ok(hex(&self.endpoint.secret_key().to_bytes()))
+    }
+
+    /// Export the default author's 32 bytes as hex, so record edits keep a stable
+    /// author identity across reloads (persist it and re-import on boot).
+    pub async fn export_default_author(&self) -> Result<String, JsError> {
+        let id = self.docs.author_default().await.map_err(to_js)?;
+        let author = self
+            .docs
+            .author_export(id)
+            .await
+            .map_err(to_js)?
+            .ok_or_else(|| JsError::new("default author not exportable"))?;
+        Ok(hex(&author.to_bytes()))
+    }
+
+    /// Import a 32-byte author (hex) and make it the node's default author.
+    pub async fn import_default_author(&self, author_hex: &str) -> Result<(), JsError> {
+        if author_hex.len() != 64 {
+            return Err(JsError::new("author must be exactly 32 bytes, hex-encoded (64 chars)"));
+        }
+        let bytes = decode_hex(author_hex).map_err(to_js)?;
+        let mut key = [0u8; 32];
+        key.copy_from_slice(&bytes);
+        let author = Author::from_bytes(&key);
+        self.docs.author_import(author.clone()).await.map_err(to_js)?;
+        self.docs.author_set_default(author.id()).await.map_err(to_js)?;
+        Ok(())
     }
 
     /// Create a new empty doc, start sync on it, return the share ticket.
