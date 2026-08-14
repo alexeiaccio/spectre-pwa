@@ -1,4 +1,5 @@
 import { For, Show } from 'solid-js'
+import { Input as TextFieldInput, Root as TextFieldRoot } from '@kobalte/core/text-field'
 import type { Site } from '../lib/vault/schema.ts'
 
 export const PURPOSE_LABEL: Record<Site['purpose'], string> = {
@@ -42,17 +43,19 @@ export function SiteFields(props: {
 }) {
   return (
     <>
-      <input
-        class="tap rounded border border-surface-700 bg-surface-800 px-2 py-1 text-sm text-slate-100"
-        value={props.draft.name}
-        onInput={(e) =>
-          props.setDraft((d) => ({
-            ...d,
-            name: (e.target as HTMLInputElement).value,
-          }))
-        }
-        placeholder={props.namePlaceholder}
-      />
+      <TextFieldRoot>
+        <TextFieldInput
+          class="tap rounded border border-surface-700 bg-surface-800 px-2 py-1 text-sm text-slate-100"
+          value={props.draft.name}
+          onInput={(e) =>
+            props.setDraft((d) => ({
+              ...d,
+              name: (e.target as HTMLInputElement).value,
+            }))
+          }
+          placeholder={props.namePlaceholder}
+        />
+      </TextFieldRoot>
       <div class="flex gap-2">
         <select
           class="tap rounded border border-surface-700 bg-surface-800 px-2 py-1 text-sm text-slate-100"
