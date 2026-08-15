@@ -7,6 +7,7 @@ import {
   ErrorText,
   Hint,
   Input,
+  QrImagePicker,
   QrScanner,
   Text,
   Textarea,
@@ -71,7 +72,9 @@ const waitForValue = (
 export default function JoinScreen() {
   const { api, navigate } = useScreen()
   const [step, setStep] = createSignal<JoinStep>('invite')
-  const [inviteMode, setInviteMode] = createSignal<'paste' | 'scan'>('paste')
+  const [inviteMode, setInviteMode] = createSignal<'paste' | 'scan' | 'image'>(
+    'paste',
+  )
   const [ticket, setTicket] = createSignal('')
   const [code, setCode] = createSignal('')
   const [localCode, setLocalCode] = createSignal('')
@@ -378,9 +381,27 @@ export default function JoinScreen() {
           >
             Scan QR
           </button>
+          <button
+            class={
+              inviteMode() === 'image'
+                ? 'rounded border border-teal-spectre px-3 py-1 text-xs text-teal-spectre'
+                : 'rounded border border-surface-700 px-3 py-1 text-xs text-slate-400 hover:text-slate-200'
+            }
+            onClick={() => setInviteMode('image')}
+          >
+            Pick image
+          </button>
         </div>
         <Show when={inviteMode() === 'scan'}>
           <QrScanner
+            onScan={(text) => {
+              setTicket(text)
+              void startJoin()
+            }}
+          />
+        </Show>
+        <Show when={inviteMode() === 'image'}>
+          <QrImagePicker
             onScan={(text) => {
               setTicket(text)
               void startJoin()

@@ -207,7 +207,7 @@ export default function SettingsScreen() {
         <Show when={invitation()}>
           <QrCode
             value={invitation()}
-            class="h-40 w-40 self-center text-surface-950"
+            class="h-auto w-full max-w-sm self-center text-surface-950"
           />
           <p class="text-xs break-all text-slate-400">{invitation()}</p>
           <div class="flex items-center gap-2">
