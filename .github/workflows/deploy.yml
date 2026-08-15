@@ -36,7 +36,6 @@ jobs:
     name: Deploy to Cloudflare Workers
     needs: ci
     runs-on: ubuntu-latest
-    if: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -48,8 +47,9 @@ jobs:
       - run: npm ci
       - run: npm run build
 
-      - uses: cloudflare/wrangler-action@v3
+      - name: Deploy
+        if: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
+        uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           command: deploy
-          workingDirectory: .
