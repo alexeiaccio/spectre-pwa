@@ -3,10 +3,29 @@ import { BrowserQRCodeReader } from '@zxing/browser'
 import type { IScannerControls } from '@zxing/browser'
 import { ErrorText, Hint } from './text.tsx'
 
+type Status = 'starting' | 'scanning' | 'error'
+
+const cameraErrorMessage = (e: unknown): string => {
+  if (e instanceof DOMException) {
+    switch (e.name) {
+      case 'NotAllowedError':
+        return 'Camera access denied — allow camera in the browser/site settings.'
+      case 'NotFoundError':
+        return 'No camera found on this device.'
+      case 'NotReadableError':
+        return 'Camera is busy — close other apps that use it.'
+      case 'SecurityError':
+        return 'Camera needs a secure (HTTPS) connection.'
+    }
+  }
+  return e instanceof Error ? e.message : String(e)
+}
+
 /**
- * Camera QR scanner: starts the rear camera (environment), decodes
- * continuously, and stops on the first successful read. Used on device B to
- * scan the host's DocTicket invitation. Cleans up the stream on unmount.
+ * Camera QR scanner: acquires the rear camera directly (ideal facingMode so a
+ * missing rear camera falls back cleanly), attaches it to the <video>, and
+ * decodes continuously via @zxing/browser. Stops + releases the stream on the
+ * first read and on unmount. Errors are surfaced with actionable text.
  */
 export function QrScanner(props: {
   onScan: (text: string) => void
@@ -14,15 +33,23 @@ export function QrScanner(props: {
 }) {
   let videoEl: HTMLVideoElement | undefined
   let controls: IScannerControls | null = null
-  const [status, setStatus] = createSignal<'starting' | 'scanning' | 'error'>(
-    'starting',
-  )
+  let stream: MediaStream | null = null
+  let pendingTimer: number | null = null
+  let settled = false
+  const [status, setStatus] = createSignal<Status>('starting')
   const [message, setMessage] = createSignal('')
 
-  onCleanup(() => {
+  const stopCamera = (): void => {
+    if (pendingTimer !== null) {
+      clearTimeout(pendingTimer)
+      pendingTimer = null
+    }
     controls?.stop()
     controls = null
-  })
+    stream?.getTracks().forEach((t) => t.stop())
+    stream = null
+  }
+  onCleanup(stopCamera)
 
   // Solid 2 rc has no onMount — a depless effect runs once after the video ref
   // is assigned (refs are set during render, effects flush after).
@@ -30,30 +57,67 @@ export function QrScanner(props: {
     () => ({ video: videoEl, onScan: props.onScan, onError: props.onError }),
     ({ video, onScan, onError }) => {
       if (!video || controls) return
-      const reader = new BrowserQRCodeReader()
-      reader
-        .decodeFromConstraints(
-          { video: { facingMode: 'environment' }, audio: false },
-          video,
-          (result, err) => {
-            if (result) {
-              controls?.stop()
-              controls = null
-              onScan(result.getText())
-            } else if (err) {
-              setMessage(err.message)
-            }
-          },
-        )
-        .then((c) => {
-          controls = c
-          setStatus('scanning')
+
+      const start = async (): Promise<void> => {
+        let s: MediaStream
+        try {
+          s = await navigator.mediaDevices.getUserMedia({
+            audio: false,
+            video: { facingMode: { ideal: 'environment' } },
+          })
+        } catch {
+          // No usable rear camera (or constraint unsupported) — retry with the
+          // default camera before surfacing an error.
+          try {
+            s = await navigator.mediaDevices.getUserMedia({
+              audio: false,
+              video: true,
+            })
+          } catch (e2) {
+            settled = true
+            setStatus('error')
+            setMessage(cameraErrorMessage(e2))
+            onError?.(e2)
+            return
+          }
+        }
+        stream = s
+        video.srcObject = s
+        video.muted = true
+        video.setAttribute('playsinline', '')
+        try {
+          await video.play()
+        } catch {
+          // Muted autoplay is allowed; a throw here is unusual — keep going.
+        }
+        const reader = new BrowserQRCodeReader()
+        controls = await reader.decodeFromStream(s, video, (result, err) => {
+          if (result) {
+            stopCamera()
+            onScan(result.getText())
+          } else if (err) {
+            setMessage(err.message)
+          }
         })
-        .catch((e: unknown) => {
-          setStatus('error')
-          setMessage(e instanceof Error ? e.message : String(e))
-          onError?.(e)
-        })
+        settled = true
+        setStatus('scanning')
+      }
+
+      void start().catch((e: unknown) => {
+        settled = true
+        setStatus('error')
+        setMessage(cameraErrorMessage(e))
+        onError?.(e)
+      })
+
+      // If the permission prompt never appears, tell the user instead of
+      // leaving "Starting camera…" forever.
+      pendingTimer = window.setTimeout(() => {
+        pendingTimer = null
+        if (!settled) {
+          setMessage('Waiting for camera permission — allow access when prompted.')
+        }
+      }, 8000)
     },
   )
 
@@ -76,6 +140,9 @@ export function QrScanner(props: {
       </Show>
       <Show when={status() === 'error'}>
         <ErrorText>{message()}</ErrorText>
+      </Show>
+      <Show when={status() === 'starting' && message()}>
+        <Hint>{message()}</Hint>
       </Show>
     </div>
   )
