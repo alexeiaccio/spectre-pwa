@@ -13,6 +13,38 @@ const toBuf = (u: Uint8Array): ArrayBuffer => u.slice().buffer
 /** Determinies rpId from the current origin's registrable domain suffix. */
 const rpId = (): string => location.hostname
 
+/** `Effect.tryPromise` wraps thrown errors in UnknownError; unwrap the cause. */
+const causeOf = (e: unknown): unknown => {
+  if (e instanceof Error && e.cause !== undefined) return e.cause
+  return e
+}
+
+const describe = (e: unknown): string => {
+  if (e instanceof DOMException) return `${e.name}: ${e.message}`
+  if (e instanceof Error) return `${e.name}: ${e.message}`
+  return String(e)
+}
+
+/** Map the UnknownError wrapper back to a typed PasskeyError, keeping cancel distinct. */
+const mapPasskeyError =
+  (cancelledMessage: string) =>
+  (e: unknown): PasskeyError => {
+    const cause = causeOf(e)
+    if (cause instanceof PasskeyError) return cause
+    if (cause instanceof DOMException && cause.name === 'NotAllowedError')
+      return new PasskeyError({ message: cancelledMessage })
+    return new PasskeyError({ message: describe(cause) })
+  }
+
+/**
+ * True when the failure is environmental (no PRF-capable platform
+ * authenticator), not a user cancel. These errors are safe to auto-fallback on.
+ */
+export const isPrfUnavailable = (e: unknown): boolean => {
+  if (!(e instanceof PasskeyError)) return false
+  return /PRF|NotSupportedError|SecurityError/i.test(e.message ?? '')
+}
+
 const asPublicKey = (cred: Credential | null): PublicKeyCredential => {
   if (!cred) throw new PasskeyError({ message: 'credential result missing' })
   // The browser API only types the base `Credential`; PRF-capable credentials
@@ -43,6 +75,8 @@ const prfOutputOf = (
 /**
  * Registration (first run): create a discoverable platform passkey that exposes PRF,
  * and return the PRF output fetched AT creation (bucket-4 providers like GPM).
+ * Errors are mapped to PasskeyError; cancel and PRF-unavailability stay distinct
+ * so the caller can offer a recovery-code-only fallback.
  */
 export const createPasskeyWithPrf = (
   salt: Uint8Array,
@@ -76,7 +110,7 @@ export const createPasskeyWithPrf = (
         message: 'PRF unsupported by this browser/authenticator',
       })
     return { credId: pk.id, prfOutput }
-  })
+  }).pipe(Effect.mapError(mapPasskeyError('Passkey creation cancelled')))
 
 /**
  * Unlock: usernameless discoverable get() that returns the deterministic PRF output
@@ -103,11 +137,7 @@ export const getPrfOutput = (
       throw new PasskeyError({ message: 'PRF not available on this device' })
     return { credId: pk.id, prfOutput }
   }).pipe(
-    Effect.mapError((e) =>
-      e instanceof PasskeyError
-        ? e
-        : new PasskeyError({ message: 'Authentication cancelled or failed' }),
-    ),
+    Effect.mapError(mapPasskeyError('Authentication cancelled or failed')),
   )
 
 /** base64url credential id (Credential.id) → bytes for allowCredentials. */

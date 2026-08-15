@@ -22,7 +22,9 @@ function fakeVault(initial: VaultStatus): VaultApi {
     busy,
     prefs: prefs as unknown as VaultApi['prefs'],
     setAutoLockMinutes: async () => true,
+    hasPasskey: () => true,
     setup: async () => undefined,
+    setupRecoveryOnly: async () => VAULT,
     unlock: async () => {
       setStatus({ kind: 'unlocked', vault: VAULT })
       return VAULT

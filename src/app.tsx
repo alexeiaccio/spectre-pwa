@@ -8,6 +8,7 @@ import { useInstallPrompt } from './lib/pwa.ts'
 import { clearClipboardTimer, useLockLifecycle } from './lib/lifecycle.ts'
 import { FlowContext } from './lib/flow.ts'
 import type { FlowApi } from './lib/flow.ts'
+import type { UpdateApi } from './lib/update.ts'
 import Header from './screens/header.tsx'
 import ErrorScreen from './screens/error-screen.tsx'
 import SetupScreen from './screens/setup-screen.tsx'
@@ -32,11 +33,16 @@ const Router = createRouter({
 export interface AppProps {
   vault?: VaultApi
   session?: SessionApi
+  update?: UpdateApi
 }
 
 export default function App(props: AppProps = {}) {
   const vault = props.vault ?? useVault()
   const session = props.session ?? useIdentitySession()
+  const update = props.update ?? {
+    updateAvailable: () => false,
+    applyUpdate: () => {},
+  }
   const { installPrompt, onInstall } = useInstallPrompt()
 
   const persistedVault = (): Vault | null => {
@@ -83,6 +89,8 @@ export default function App(props: AppProps = {}) {
         installPrompt={installPrompt}
         onInstall={onInstall}
         onLock={allLock}
+        updateAvailable={update.updateAvailable}
+        onUpdate={update.applyUpdate}
       />
       <main class="flex flex-1 flex-col gap-4 px-4 py-6">
         <Show when={vault.busy()}>

@@ -78,4 +78,23 @@ describe('passkey unlock (PRF salt persistence)', () => {
     const vault = await run(vaultImpl.unlock())
     expect(vault).toEqual({ formatVersion: 1, identities: [] })
   })
+
+  test('recovery-only vault (no PRF context): code unlock works, passkey unlock blocked until re-enroll', async () => {
+    await run(vaultImpl.setupRecoveryOnly(RECOVERY))
+    Effect.runSync(vaultImpl.lock())
+
+    await expect(run(vaultImpl.unlock())).rejects.toMatchObject({
+      _tag: 'VaultUnlockedError',
+    })
+
+    const viaCode = await run(vaultImpl.unlockWithRecovery(RECOVERY))
+    expect(viaCode).toEqual({ formatVersion: 1, identities: [] })
+
+    // A passkey can be enrolled later from a PRF-capable context.
+    await run(vaultImpl.reEnrollPasskey(RECOVERY))
+    Effect.runSync(vaultImpl.lock())
+
+    const viaPasskey = await run(vaultImpl.unlock())
+    expect(viaPasskey).toEqual({ formatVersion: 1, identities: [] })
+  })
 })

@@ -1,6 +1,7 @@
 import { createSignal } from 'solid-js'
 import { Effect } from 'effect'
 import { vaultImpl } from './service.ts'
+import { isPrfUnavailable } from './passkey.ts'
 import {
   readDeviceEnvelope,
   readMeta,
@@ -8,11 +9,13 @@ import {
   writePrefs,
 } from './storage.ts'
 import type { AesKey } from './crypto-dek.ts'
-import type { Envelope, Prefs, Vault, WrappedDeK } from './schema.ts'
+import type { Envelope, Prefs, Vault } from './schema.ts'
 import type { SyncRecord } from '../sync/types.ts'
 import { pushSave } from '../sync/bridge.ts'
 
 const DEFAULT_PREFS: Prefs = { theme: 'dark', autoLockMinutes: 2 }
+
+export type SetupResult = { identity: Vault; passkeyEnrolled: boolean }
 
 export type VaultStatus =
   | { kind: 'booting' }
@@ -53,6 +56,10 @@ const requestPersist = (): void => {
 export function useVault() {
   const [status, setStatus] = createSignal<VaultStatus>({ kind: 'booting' })
   const [busy, setBusy] = createSignal(false)
+  // Whether this device's envelope carries a passkey wrap. Recovery-only vaults
+  // (created in a context without PRF, e.g. an installed PWA) have no passkey,
+  // so the UI offers the recovery code instead of a dead passkey button.
+  const [hasPasskey, setHasPasskey] = createSignal(false)
   // Writable memo: fn returns the settled prefs from storage (suspend until read),
   // setPrefs overrides locally for optimisic edits without re-running the source.
   // Failed reads fall back to defaults — prefs are non-secret, non-critical settings.
@@ -73,6 +80,7 @@ export function useVault() {
       .then(async (meta) => {
         if (meta?.deviceId) {
           const envelope = await runPromise(readDeviceEnvelope(meta.deviceId))
+          setHasPasskey(!!envelope?.deks.some((d) => d.method === 'passkey'))
           setStatus(
             envelope
               ? { kind: 'locked' }
@@ -80,6 +88,7 @@ export function useVault() {
           )
           return
         }
+        setHasPasskey(false)
         setStatus({ kind: 'needs-setup' })
       })
       .catch(fail)
@@ -98,14 +107,38 @@ export function useVault() {
     }
   }
 
-  const setup = (
-    recoveryCode: string,
-  ): Promise<{ recoveryRecord: WrappedDeK; identity: Vault } | undefined> =>
+  const setup = (recoveryCode: string): Promise<SetupResult | undefined> =>
     withBusy(async () => {
-      const result: { recoveryRecord: WrappedDeK; identity: Vault } =
-        await runPromise(vaultImpl.setup(recoveryCode))
+      try {
+        const result = await runPromise(vaultImpl.setup(recoveryCode))
+        setHasPasskey(true)
+        setStatus({ kind: 'unlocked', vault: result.identity })
+        return { identity: result.identity, passkeyEnrolled: true }
+      } catch (e) {
+        // No PRF-capable platform authenticator (installed PWA on macOS,
+        // Windows Hello, Chrome local passkeys) — fall back to a
+        // recovery-code-only vault instead of blocking creation.
+        if (isPrfUnavailable(e)) {
+          const result = await runPromise(
+            vaultImpl.setupRecoveryOnly(recoveryCode),
+          )
+          setHasPasskey(false)
+          setStatus({ kind: 'unlocked', vault: result.identity })
+          return { identity: result.identity, passkeyEnrolled: false }
+        }
+        throw e
+      }
+    })
+
+  /** Explicit passkey-free creation: vault secured by the recovery code alone. */
+  const setupRecoveryOnly = (
+    recoveryCode: string,
+  ): Promise<Vault | undefined> =>
+    withBusy(async () => {
+      const result = await runPromise(vaultImpl.setupRecoveryOnly(recoveryCode))
+      setHasPasskey(false)
       setStatus({ kind: 'unlocked', vault: result.identity })
-      return result
+      return result.identity
     })
 
   const unlock = (): Promise<Vault | undefined> =>
@@ -180,7 +213,9 @@ export function useVault() {
     busy,
     prefs,
     setAutoLockMinutes,
+    hasPasskey,
     setup,
+    setupRecoveryOnly,
     unlock,
     unlockWithRecovery,
     reEnrollPasskey,

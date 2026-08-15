@@ -1,10 +1,10 @@
 import { createEffect, createSignal, For, Show } from 'solid-js'
-import { renderSVG } from 'uqr'
 import {
   Button,
   Card,
   Hint,
   Input,
+  QrCode,
   Select,
   Text,
 } from '../components/ui/index.ts'
@@ -205,9 +205,9 @@ export default function IdentitiesScreen() {
           </Button>
         </Show>
         <Show when={invitation()}>
-          <div
+          <QrCode
+            value={invitation()}
             class="h-40 w-40 self-center text-surface-950"
-            innerHTML={renderSVG(invitation(), { pixelSize: 5, border: 2 })}
           />
           <p class="text-xs break-all text-slate-400">{invitation()}</p>
           <div class="flex items-center gap-2">

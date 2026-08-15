@@ -43,6 +43,15 @@ interface VaultService {
     { recoveryRecord: WrappedDeK; identity: Vault },
     VaultError
   >
+  /**
+   * First run without a passkey (no PRF-capable authenticator, e.g. an
+   * installed PWA on macOS): the DEK is wrapped under the recovery code alone.
+   * A passkey can be enrolled later via reEnrollPasskey from a PRF-capable
+   * context (browser tab).
+   */
+  setupRecoveryOnly: (
+    recoveryCode: string,
+  ) => Effect.Effect<{ identity: Vault }, VaultError>
   /** Unlock via passkey: PRF → KEK → unwrap DEK → load the identity records. */
   unlock: () => Effect.Effect<Vault, VaultError>
   /** Recovery path: code → KEK → unwrap DEK → load the identity records. */
@@ -146,6 +155,28 @@ const wrapRaw = Effect.fn('vault.wrapRaw')(function* (
   }
 
   return { version: 1, deks: [passkeyRecord, recoveryRecord] }
+})
+
+/**
+ * Generate a DEK wrapped under the recovery code only — no passkey record.
+ * Used by setupRecoveryOnly for contexts without a PRF-capable platform
+ * authenticator (installed PWA on macOS, Windows Hello, …).
+ */
+const makeRecoveryEnvelope = Effect.fn('vault.makeRecoveryEnvelope')(function* (
+  recoveryCode: string,
+): Effect.fn.Return<{ dek: AesKey; envelope: Envelope }, VaultError> {
+  const { key: dek, raw } = yield* generateDek()
+  const kemSaltR = crypto.getRandomValues(new Uint8Array(KEK_SALT_BYTES))
+  const kekR = yield* kekFromPrf(textEncoder.encode(recoveryCode), kemSaltR)
+  const wrappedR = yield* wrapDek(raw, kekR)
+  raw.fill(0) // raw DEK bytes are no longer needed — wipe
+  const recoveryRecord: WrappedDeK = {
+    method: 'recovery',
+    salt: toBuf(kemSaltR),
+    iv: toBuf(wrappedR.iv),
+    wrapped: toBuf(wrappedR.wrapped),
+  }
+  return { dek, envelope: { version: 1, deks: [recoveryRecord] } }
 })
 
 const unwrapWith = Effect.fn('vault.unwrapWith')(function* (
@@ -266,6 +297,23 @@ const makeVaultImpl = (
     yield* Ref.set(session, { dek, vault })
     const recoveryRecord = envelope.deks.find((d) => d.method === 'recovery')!
     return { recoveryRecord, identity: vault }
+  }),
+
+  setupRecoveryOnly: Effect.fn('VaultService.setupRecoveryOnly')(function* (
+    recoveryCode: string,
+  ): Effect.fn.Return<{ identity: Vault }, VaultError> {
+    const existing = yield* readMeta()
+    if (existing?.deviceId)
+      return yield* new VaultUnlockedError({
+        message: 'vault already exists',
+      })
+    const { dek, envelope } = yield* makeRecoveryEnvelope(recoveryCode)
+    const deviceId = crypto.randomUUID()
+    yield* writeDeviceEnvelope(deviceId, envelope)
+    yield* writeMeta({ deviceId })
+    const vault: Vault = { formatVersion: 1, identities: [] }
+    yield* Ref.set(session, { dek, vault })
+    return { identity: vault }
   }),
 
   unlock: Effect.fn('VaultService.unlock')(function* (): Effect.fn.Return<
@@ -391,6 +439,8 @@ const service = (): VaultService =>
 /** Module-level facade over `VaultServiceLive`. The session state lives in the layer's Ref. */
 export const vaultImpl: VaultService = {
   setup: (recoveryCode) => service().setup(recoveryCode),
+  setupRecoveryOnly: (recoveryCode) =>
+    service().setupRecoveryOnly(recoveryCode),
   unlock: () => service().unlock(),
   unlockWithRecovery: (code) => service().unlockWithRecovery(code),
   reEnrollPasskey: (code) => service().reEnrollPasskey(code),
