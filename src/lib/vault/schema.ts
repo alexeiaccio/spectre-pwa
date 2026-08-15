@@ -31,6 +31,12 @@ export interface Identity {
   fullName: string
   algorithm: AlgorithmVersion
   sites: readonly Site[]
+  /**
+   * The Spectre passphrase, stored inside this DEK-encrypted record so the
+   * passkey unlock can auto-unlock the identity (no re-typing). Absent on
+   * records written by older builds / devices where the user hasn't typed it.
+   */
+  passphrase?: string
 }
 
 /** The decrypted plaintext tree, never written to disk directly. */
@@ -63,6 +69,7 @@ export const IdentitySchema = Schema.Struct({
     Schema.Literal(3),
   ]),
   sites: Schema.Array(SiteSchema),
+  passphrase: Schema.optional(Schema.String),
 })
 
 export interface WrappedDeK {

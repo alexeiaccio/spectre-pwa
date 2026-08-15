@@ -3,9 +3,11 @@ import {
   Button,
   Card,
   Hint,
+  Identicon,
   Input,
   QrCode,
   Select,
+  useIdenticon,
 } from '../components/ui/index.ts'
 import { useScreen } from '../lib/flow.ts'
 import { getSyncAdapter } from '../lib/sync/adapter.ts'
@@ -42,6 +44,12 @@ export default function SettingsScreen() {
   const [pairError, setPairError] = createSignal<string | null>(null)
   const [copied, setCopied] = createSignal(false)
 
+  // Live identicon while the identity (full name + secret) is being generated.
+  const identicon = useIdenticon(
+    () => newIdentity().fullName,
+    () => newIdentity().passphrase,
+  )
+
   const onSaveIdentity = async (): Promise<void> => {
     const v = api.vaultValue()
     const n = newIdentity()
@@ -51,6 +59,7 @@ export default function SettingsScreen() {
       fullName: n.fullName.trim(),
       algorithm: 3,
       sites: [],
+      passphrase: n.passphrase,
     }
     const next = { ...v, identities: [...v.identities, identity] }
     const ok = await api.commitMutation(next)
@@ -92,27 +101,32 @@ export default function SettingsScreen() {
       </div>
       <Card variant="dashed">
         <Hint>Add an identity (passphrase is your Spectre secret):</Hint>
-        <Input
-          value={newIdentity().fullName}
-          onInput={(e) =>
-            setNewIdentity((n) => ({
-              ...n,
-              fullName: (e.target as HTMLInputElement).value,
-            }))
-          }
-          placeholder="full name"
-        />
-        <Input
-          value={newIdentity().passphrase}
-          onInput={(e) =>
-            setNewIdentity((n) => ({
-              ...n,
-              passphrase: (e.target as HTMLInputElement).value,
-            }))
-          }
-          placeholder="passphrase (min 8)"
-          type="password"
-        />
+        <div class="flex items-center gap-3">
+          <Identicon value={identicon} size="lg" />
+          <div class="flex flex-1 flex-col gap-2">
+            <Input
+              value={newIdentity().fullName}
+              onInput={(e) =>
+                setNewIdentity((n) => ({
+                  ...n,
+                  fullName: (e.target as HTMLInputElement).value,
+                }))
+              }
+              placeholder="full name"
+            />
+            <Input
+              value={newIdentity().passphrase}
+              onInput={(e) =>
+                setNewIdentity((n) => ({
+                  ...n,
+                  passphrase: (e.target as HTMLInputElement).value,
+                }))
+              }
+              placeholder="passphrase (min 8)"
+              type="password"
+            />
+          </div>
+        </div>
         <Button
           variant="primary"
           disabled={newIdentity().passphrase.length < 8}

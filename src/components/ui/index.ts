@@ -1,4 +1,5 @@
 export { Button } from './button.tsx'
+export { Identicon, useIdenticon } from './identicon.tsx'
 export { Input } from './input.tsx'
 export { Textarea } from './textarea.tsx'
 export { Card } from './card.tsx'

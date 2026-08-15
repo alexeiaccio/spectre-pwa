@@ -45,3 +45,15 @@ export const deleteIdentity = (vault: Vault, identityId: string): Vault => ({
   ...vault,
   identities: vault.identities.filter((i) => i.id !== identityId),
 })
+
+/** Record the Spectre passphrase on an identity (auto-unlocks future visits). */
+export const setIdentityPassphrase = (
+  vault: Vault,
+  identityId: string,
+  passphrase: string,
+): Vault => ({
+  ...vault,
+  identities: vault.identities.map((i) =>
+    i.id === identityId ? { ...i, passphrase } : i,
+  ),
+})

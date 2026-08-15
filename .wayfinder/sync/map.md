@@ -46,7 +46,7 @@ Working peer-to-peer vault sync across multiple installs of Spectre Pocket: iden
 
 ## Out of scope
 
-- The Spectre **passphrase** — never leaves the device, never syncs (typed per launch).
+- The Spectre **passphrase** — REVISED (2026-08-15): now stored as `Identity.passphrase` inside the DEK-encrypted record (wrap-under-DEK, so passkey unlock auto-unlocks identities). It therefore travels inside synced records; the recovery code now also yields every derived password. Old "never syncs" stance superseded by human decision.
 - **Background/periodic sync** — foreground + online only. Revived as its own effort: **Sync-bg** (`.wayfinder/sync-bg/map.md`).
 - WebRTC or direct browser-to-browser connections (impossible in browser sandbox today).
 - Sharing anything beyond the vault (no cloud store, no cross-user sync).

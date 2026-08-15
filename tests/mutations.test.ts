@@ -4,6 +4,7 @@ import {
   updateSite,
   deleteSite,
   deleteIdentity,
+  setIdentityPassphrase,
 } from '../src/lib/vault/mutations.ts'
 import type { Identity, Site, Vault } from '../src/lib/vault/schema.ts'
 
@@ -91,5 +92,17 @@ test('deleteIdentity removes the identity and leaves others alone', () => {
 
 test('deleteIdentity is a no-op for an unknown identity', () => {
   const next = deleteIdentity(VAULT, 'ghost')
+  expect(next).toEqual(VAULT)
+})
+
+test('setIdentityPassphrase records the passphrase only on the target identity', () => {
+  const next = setIdentityPassphrase(VAULT, 'i1', 'banana colored duckling')
+  expect(next.identities[0].passphrase).toBe('banana colored duckling')
+  expect(next.identities[1].passphrase).toBeUndefined()
+  expect(VAULT.identities[0].passphrase).toBeUndefined()
+})
+
+test('setIdentityPassphrase is a no-op for an unknown identity', () => {
+  const next = setIdentityPassphrase(VAULT, 'ghost', 'x')
   expect(next).toEqual(VAULT)
 })

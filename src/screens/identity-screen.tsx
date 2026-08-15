@@ -12,14 +12,21 @@ import {
   Button,
   Card,
   Hint,
+  Identicon,
   Input,
   Text,
+  useIdenticon,
 } from '../components/ui/index.ts'
 import { PURPOSE_LABEL, NEW_SITE_DRAFT, SiteFields } from './site-fields.tsx'
 import type { SiteFormState } from './site-fields.tsx'
 import { copyWithAutoClear } from '../lib/lifecycle.ts'
 import { useScreen } from '../lib/flow.ts'
-import { addSite, deleteSite, updateSite } from '../lib/vault/mutations.ts'
+import {
+  addSite,
+  deleteSite,
+  setIdentityPassphrase,
+  updateSite,
+} from '../lib/vault/mutations.ts'
 import type { Site } from '../lib/vault/schema.ts'
 import type { SessionStatus } from '../lib/spectre/use-identity-session.ts'
 
@@ -65,6 +72,12 @@ export default function IdentityScreen() {
     if (copyTimer !== null) clearTimeout(copyTimer)
   })
 
+  // Live identicon while the passphrase (Spectre secret) is being typed.
+  const identicon = useIdenticon(
+    () => identity()?.fullName ?? '',
+    () => passphrase(),
+  )
+
   // A ready session unlocked for a different identity must not serve this
   // identity's sites — treat it as idle and lock the stale session.
   const effective = createMemo((): SessionStatus => {
@@ -93,13 +106,36 @@ export default function IdentityScreen() {
       <p class="text-sm text-red-400">{s.message}</p>
     ) : null
   })
+  // Auto-unlock from the stored (DEK-wrapped) passphrase — no re-typing.
+  // Fires only when the session is idle for this identity and a passphrase
+  // was recorded; unlock transitions to working/ready so this re-runs to a
+  // no-op (and an error stops it too).
+  createEffect(
+    () => {
+      const id = identity()
+      const s = effective()
+      return id?.passphrase && s.kind === 'idle'
+        ? { id, passphrase: id.passphrase }
+        : null
+    },
+    (target) => {
+      if (target) void api.session.unlock(target.id, target.passphrase)
+    },
+  )
   const onUnlockIdentity = async (): Promise<void> => {
     const id = identity()
-    if (!id) return
-    const done = await api.session.unlock(id, passphrase())
+    const entered = passphrase()
+    if (!id || !entered) return
+    const done = await api.session.unlock(id, entered)
     if (done) {
       setPassphrase('')
       setRecent(null)
+      // Record the passphrase under the DEK so future visits auto-unlock.
+      if (!id.passphrase) {
+        const v = api.vaultValue()
+        if (v)
+          await api.commitMutation(setIdentityPassphrase(v, id.id, entered))
+      }
     }
   }
 
@@ -223,12 +259,18 @@ export default function IdentityScreen() {
             This identity is passphrase-locked. The secret is derived once per
             session:
           </Text>
-          <Input
-            value={passphrase()}
-            onInput={(e) => setPassphrase((e.target as HTMLInputElement).value)}
-            placeholder="Spectre passphrase"
-            type="password"
-          />
+          <div class="flex items-center gap-3">
+            <Identicon value={identicon} size="lg" />
+            <Input
+              class="flex-1"
+              value={passphrase()}
+              onInput={(e) =>
+                setPassphrase((e.target as HTMLInputElement).value)
+              }
+              placeholder="Spectre passphrase"
+              type="password"
+            />
+          </div>
           <Button variant="primary" onClick={() => void onUnlockIdentity()}>
             Unlock identity
           </Button>
