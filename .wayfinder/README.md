@@ -11,6 +11,7 @@ Each effort gets its own self-contained directory under `.wayfinder/` (map + `ti
 - **Routing — navigation seam + DX tooling**: `.wayfinder/routing/map.md` (charting).
 - **S6 — vault-store migration to sync records**: `.wayfinder/s6/map.md` (charting).
 - **Kobalte — form components adoption**: `.wayfinder/kobalte/map.md` (in progress).
+- **Screens — per-route screens + kebab-case files**: `.wayfinder/screens/map.md` (in progress).
 
 ## Where things live
 
