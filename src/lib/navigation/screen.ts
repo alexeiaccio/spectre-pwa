@@ -37,12 +37,13 @@ export const deriveScreen = (
   sessionStatus: SessionStatus,
   url: string,
 ): ScreenDerivation => {
-  // /join is reachable from needs-setup and locked (S5 fresh join); unlocked
-  // vaults fall through and redirect / (existing-vault re-join is a follow-up).
-  // booting and error dominate.
+  // /join is reachable from needs-setup, locked, and unlocked (S5: fresh join +
+  // existing-vault adopt-code join). booting and error dominate.
   if (
     url === '/join' &&
-    (vaultStatus.kind === 'needs-setup' || vaultStatus.kind === 'locked')
+    (vaultStatus.kind === 'needs-setup' ||
+      vaultStatus.kind === 'locked' ||
+      vaultStatus.kind === 'unlocked')
   ) {
     return { screen: { view: 'join' }, redirect: noRedirect }
   }

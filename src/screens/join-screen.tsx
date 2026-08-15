@@ -13,9 +13,10 @@ import {
   SYNC_EXPERIMENTAL,
   SyncUnavailableError,
   getSyncAdapter,
+  persistDoc,
 } from '../lib/sync/adapter.ts'
 import type { SyncAdapter } from '../lib/sync/adapter.ts'
-import { reencryptUnderDekB, verifyRecoveryCode } from '../lib/sync/records.ts'
+import { adoptHostCode, reencryptUnderDekB, verifyRecoveryCode } from '../lib/sync/records.ts'
 import {
   HOST_KEY,
   decodeEnvelopeDoc,
@@ -27,13 +28,14 @@ import {
   type DeviceEnvelope,
   type SyncRecord,
 } from '../lib/sync/types.ts'
-import { persistDoc } from '../lib/sync/adapter.ts'
-import { createPasskeyWithPrf } from '../lib/vault/passkey.ts'
+import { readDeviceEnvelope, readMeta } from '../lib/vault/storage.ts'
+import { vaultImpl } from '../lib/vault/service.ts'
+import { createPasskeyWithPrf, getPrfOutput } from '../lib/vault/passkey.ts'
 import type { AesKey } from '../lib/vault/crypto-dek.ts'
 import type { Envelope, Vault } from '../lib/vault/schema.ts'
 import type { VaultStatus } from '../lib/vault/use-vault.ts'
 
-type JoinStep = 'invite' | 'syncing' | 'recovery' | 'enrolling'
+type JoinStep = 'unlock' | 'invite' | 'syncing' | 'recovery' | 'enrolling' | 'adopting'
 
 /**
  * Poll `fn` until it returns a value, the Effect `Clock` passes the deadline,
@@ -59,6 +61,9 @@ const waitForValue = (
 
 export default function JoinScreen(props: {
   vaultStatus: () => VaultStatus
+  onUnlockLocal: (
+    method: { kind: 'passkey' } | { kind: 'recovery'; code: string },
+  ) => Promise<boolean>
   onComplete: (joined: {
     deviceId: string
     envelope: Envelope
@@ -70,13 +75,35 @@ export default function JoinScreen(props: {
   const [step, setStep] = createSignal<JoinStep>('invite')
   const [ticket, setTicket] = createSignal('')
   const [code, setCode] = createSignal('')
+  const [localCode, setLocalCode] = createSignal('')
   const [error, setError] = createSignal<string | null>(null)
   const [busy, setBusy] = createSignal(false)
+
+  // A device that already has a vault joins by adopting the host's code.
+  const existingVault = (): boolean =>
+    props.vaultStatus().kind === 'locked' ||
+    props.vaultStatus().kind === 'unlocked'
 
   let sync: SyncAdapter | null = null
   let docId = ''
   let hostEnvelope: DeviceEnvelope | null = null
   let hostRecords = new Map<string, SyncRecord>()
+
+  const unlockLocal = async (
+    method: { kind: 'passkey' } | { kind: 'recovery'; code: string },
+  ): Promise<void> => {
+    setError(null)
+    setBusy(true)
+    try {
+      const ok = await props.onUnlockLocal(method)
+      if (ok) setStep('invite')
+      else setError('could not unlock this device')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
 
   const startJoin = async (): Promise<void> => {
     setError(null)
@@ -139,7 +166,9 @@ export default function JoinScreen(props: {
         setError('wrong recovery code')
         return
       }
-      setStep('enrolling')
+      // A's code verified → fresh installs enroll a new passkey; existing
+      // vaults adopt A's code by rotating their DEK under B's own passkey.
+      setStep(existingVault() ? 'adopting' : 'enrolling')
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -152,9 +181,7 @@ export default function JoinScreen(props: {
     setError(null)
     setBusy(true)
     try {
-      // Enroll this device's passkey first so DEK-B gets its wrap too. The PRF
-      // salt + credential id are recorded on the wrap so this device can unlock
-      // by passkey later (and target the right credential after re-enrolls).
+      // Fresh join: enroll this device's passkey so DEK-B gets its wrap too.
       const prfSalt = crypto.getRandomValues(new Uint8Array(32))
       const { credId, prfOutput } = await Effect.runPromise(
         createPasskeyWithPrf(prfSalt),
@@ -188,7 +215,67 @@ export default function JoinScreen(props: {
         dek: joined.dek,
       })
       if (!result) setError('could not save the joined vault')
+      else props.onBack() // route to / (identities) — the router takes over
       // On success the vault status becomes unlocked and the router takes over.
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const adoptAndFinish = async (): Promise<void> => {
+    if (!hostEnvelope || !sync || !docId) return
+    setError(null)
+    setBusy(true)
+    try {
+      // Existing-vault join (S5 adopt-the-code): B keeps its identities, adopts
+      // A's recovery code, and rotates its DEK under B's own passkey.
+      const meta = await Effect.runPromise(readMeta())
+      if (!meta?.deviceId)
+        throw new SyncUnavailableError({ message: 'no device identity' })
+      const localEnvelope = await Effect.runPromise(
+        readDeviceEnvelope(meta.deviceId),
+      )
+      if (!localEnvelope)
+        throw new SyncUnavailableError({ message: 'no local envelope' })
+      const session = await Effect.runPromise(vaultImpl.session())
+      if (!session)
+        throw new SyncUnavailableError({ message: 'vault locked' })
+      const passkeyRec = localEnvelope.deks.find((d) => d.method === 'passkey')
+      if (!passkeyRec?.prfSalt || !passkeyRec.credId)
+        throw new SyncUnavailableError({ message: 'no passkey record' })
+      const { prfOutput } = await Effect.runPromise(
+        getPrfOutput(new Uint8Array(passkeyRec.prfSalt), passkeyRec.credId),
+      )
+      const joined = await Effect.runPromise(
+        adoptHostCode({
+          hostEnvelope,
+          hostRecords,
+          hostCode: code(),
+          localVault: session.vault,
+          deviceId: meta.deviceId,
+          passkeyPrf: prfOutput,
+          passkeyPrfSalt: new Uint8Array(passkeyRec.prfSalt),
+          passkeyCredId: passkeyRec.credId,
+        }),
+      )
+      for (const [id, rec] of joined.records) {
+        await sync.set(docId, id, encodeRecordDoc(rec))
+      }
+      await sync.set(
+        docId,
+        envelopeKey(meta.deviceId),
+        encodeEnvelopeDoc(joined.envelope),
+      )
+      const result = await props.onComplete({
+        deviceId: meta.deviceId,
+        envelope: { version: 1, deks: joined.envelope.deks },
+        records: joined.records,
+        dek: joined.dek,
+      })
+      if (!result) setError('could not save the joined vault')
+      else props.onBack() // route to / (identities)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -209,10 +296,11 @@ export default function JoinScreen(props: {
       </div>
 
       <Show when={props.vaultStatus().kind === 'locked'}>
-        <p class="text-xs text-amber-400">
-          This device already has a vault — joining creates a fresh vault here
-          and replaces it.
-        </p>
+        <Hint>
+          This device already has a vault — joining adopts the other device's
+          recovery code; this vault's identities merge in (your old code stops
+          working).
+        </Hint>
       </Show>
       <Show when={SYNC_EXPERIMENTAL}>
         <Hint>
@@ -222,6 +310,29 @@ export default function JoinScreen(props: {
       </Show>
       <Show when={error()}>
         <ErrorText>{error()}</ErrorText>
+      </Show>
+
+      <Show when={step() === 'unlock'}>
+        <Text>Unlock this device first (its identities will merge into the joined vault):</Text>
+        <Button
+          variant="primary"
+          onClick={() => void unlockLocal({ kind: 'passkey' })}
+        >
+          Unlock with passkey
+        </Button>
+        <Input
+          value={localCode()}
+          onInput={(e) => setLocalCode((e.target as HTMLInputElement).value)}
+          placeholder="recovery code"
+          type="password"
+        />
+        <Button
+          variant="secondary"
+          disabled={localCode().length < 8}
+          onClick={() => void unlockLocal({ kind: 'recovery', code: localCode() })}
+        >
+          Unlock with code
+        </Button>
       </Show>
 
       <Show when={step() === 'invite'}>
@@ -254,8 +365,8 @@ export default function JoinScreen(props: {
 
       <Show when={step() === 'recovery'}>
         <Text>
-          This vault is passphrase-locked. Enter the recovery code from the
-          other device (verified against the host's envelope):
+          Enter the recovery code from the other device (verified against the
+          host's envelope):
         </Text>
         <Input
           value={code()}
@@ -276,6 +387,16 @@ export default function JoinScreen(props: {
         <Text>Last step — enroll a passkey for this device:</Text>
         <Button variant="primary" onClick={() => void enrollAndFinish()}>
           {busy() ? 'Enrolling…' : 'Enroll passkey'}
+        </Button>
+      </Show>
+
+      <Show when={step() === 'adopting'}>
+        <Text>
+          Last step — confirm this device's passkey; your vault adopts the other
+          device's recovery code.
+        </Text>
+        <Button variant="primary" onClick={() => void adoptAndFinish()}>
+          {busy() ? 'Adopting…' : 'Adopt &amp; merge'}
         </Button>
       </Show>
     </div>

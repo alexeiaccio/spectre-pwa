@@ -1,4 +1,5 @@
 import { createSignal, For, Show } from 'solid-js'
+import { renderSVG } from 'uqr'
 import {
   Button,
   Card,
@@ -173,6 +174,10 @@ export default function IdentitiesScreen(props: {
           </Button>
         </Show>
         <Show when={invitation()}>
+          <div
+            class="h-40 w-40 self-center text-surface-950"
+            innerHTML={renderSVG(invitation(), { pixelSize: 5, border: 2 })}
+          />
           <p class="text-xs break-all text-slate-400">{invitation()}</p>
           <div class="flex items-center gap-2">
             <Button variant="secondary" onClick={onCopyInvitation}>

@@ -10,7 +10,7 @@ import {
   type AesKey,
 } from '../vault/crypto-dek.ts'
 import { IdentitySchema } from '../vault/schema.ts'
-import type { Identity, WrappedDeK } from '../vault/schema.ts'
+import type { Identity, Vault, WrappedDeK } from '../vault/schema.ts'
 import type { DeviceEnvelope, SyncRecord } from './types.ts'
 
 const textEncoder = new TextEncoder()
@@ -190,6 +190,57 @@ export const reencryptUnderDekB = Effect.fn('sync.reencryptUnderDekB')(
       records,
       envelope: { v: 1, deviceId: args.deviceId, deks },
       dek: dekB,
+      identities,
+    }
+  },
+)
+
+/**
+ * Existing-vault join (S5: "adopts the host's code"). B keeps its identities but
+ * adopts A's recovery code: since B's DEK is non-extractable, adoption is a
+ * **rotation** — a fresh DEK-B′ is wrapped under A's code (+ B's existing
+ * passkey PRF), and the merged identity set (B's local identities win on uuid
+ * conflict; A's non-conflicting records are adopted) is re-encrypted under it.
+ * The result is written to A's doc and to B's mirror; B's old code stops working.
+ */
+export const adoptHostCode = Effect.fn('sync.adoptHostCode')(
+  function* (args: {
+    hostEnvelope: DeviceEnvelope
+    hostRecords: ReadonlyMap<string, SyncRecord>
+    hostCode: string
+    localVault: Vault
+    deviceId: string
+    passkeyPrf?: Uint8Array
+    passkeyPrfSalt?: Uint8Array
+    passkeyCredId?: string
+  }): Effect.fn.Return<JoinedDoc, CryptoError> {
+    const hostDek = yield* unwrapRecoveryDek(args.hostEnvelope, args.hostCode)
+    const { key: dekB2, raw } = yield* generateDek()
+    const deks = yield* wrapDekUnder(
+      raw,
+      args.hostCode,
+      args.passkeyPrf,
+      args.passkeyPrfSalt,
+      args.passkeyCredId,
+    )
+    const merged = new Map<string, Identity>(
+      args.localVault.identities.map((i) => [i.id, i]),
+    )
+    for (const [id, record] of args.hostRecords) {
+      if (record.kind !== 'record' || merged.has(id)) continue
+      const identity = yield* decodeIdentityRecord(hostDek, record)
+      merged.set(id, identity)
+    }
+    const identities = [...merged.values()]
+    const records = new Map<string, SyncRecord>()
+    for (const identity of identities) {
+      const rec = yield* encodeIdentityRecord(dekB2, identity, args.deviceId)
+      records.set(identity.id, rec)
+    }
+    return {
+      records,
+      envelope: { v: 1, deviceId: args.deviceId, deks },
+      dek: dekB2,
       identities,
     }
   },
