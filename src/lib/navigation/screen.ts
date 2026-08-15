@@ -7,6 +7,7 @@ export type Screen =
   | { view: 'locked' }
   | { view: 'error'; message: string }
   | { view: 'identities' }
+  | { view: 'settings' }
   | { view: 'identity'; id: string; status: SessionStatus }
   | { view: 'join' }
 
@@ -76,6 +77,9 @@ export const deriveScreen = (
           screen: { view: 'identity', id: match[1], status: sessionStatus },
           redirect: noRedirect,
         }
+      }
+      if (url === '/settings') {
+        return { screen: { view: 'settings' }, redirect: noRedirect }
       }
       if (url === '/') {
         return { screen: { view: 'identities' }, redirect: noRedirect }

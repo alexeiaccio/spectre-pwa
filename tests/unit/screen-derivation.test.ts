@@ -105,6 +105,15 @@ const cases: Case[] = [
     expected: { screen: { view: 'locked' }, redirect: { kind: 'none' } },
   },
   {
+    name: 'deep link /settings while locked lands on the locked screen',
+    vault: { kind: 'locked' },
+    url: '/settings',
+    expected: {
+      screen: { view: 'locked' },
+      redirect: { kind: 'redirect', to: '/locked', replace: true },
+    },
+  },
+  {
     name: 'deep link /identity/abc while locked lands on the locked screen',
     vault: { kind: 'locked' },
     url: '/identity/abc',
@@ -128,6 +137,12 @@ const cases: Case[] = [
     vault: { kind: 'unlocked', vault: VAULT },
     url: '/',
     expected: { screen: { view: 'identities' }, redirect: { kind: 'none' } },
+  },
+  {
+    name: 'unlocked at /settings shows settings',
+    vault: { kind: 'unlocked', vault: VAULT },
+    url: '/settings',
+    expected: { screen: { view: 'settings' }, redirect: { kind: 'none' } },
   },
   {
     name: 'unlocked at /setup redirects to /',

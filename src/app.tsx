@@ -15,6 +15,7 @@ import SetupScreen from './screens/setup-screen.tsx'
 import LockedScreen from './screens/locked-screen.tsx'
 import JoinScreen from './screens/join-screen.tsx'
 import IdentitiesScreen from './screens/identities-screen.tsx'
+import SettingsScreen from './screens/settings-screen.tsx'
 import IdentityScreen from './screens/identity-screen.tsx'
 import type { Vault } from './lib/vault/schema.ts'
 
@@ -24,6 +25,7 @@ const Router = createRouter({
     { path: '/setup', component: SetupScreen },
     { path: '/locked', component: LockedScreen },
     { path: '/join', component: JoinScreen },
+    { path: '/settings', component: SettingsScreen },
     { path: '/identity/:uuid', component: IdentityScreen },
     { path: '/*', component: ErrorScreen },
   ]),

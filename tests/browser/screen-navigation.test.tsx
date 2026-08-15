@@ -84,6 +84,37 @@ test('unlocked deep link to /identity/<uuid> renders the identity screen', async
   expect(window.location.pathname).toBe('/identity/abc-123')
 })
 
+test('unlocked deep link to /settings renders the settings screen', async () => {
+  window.history.replaceState({}, '', '/settings')
+  const { container } = render(() => (
+    <App
+      vault={fakeVault({ kind: 'unlocked', vault: VAULT })}
+      session={fakeSession()}
+    />
+  ))
+  await waitFor(() => {
+    expect(container.querySelector('[data-screen="settings"]')).toBeTruthy()
+  })
+  expect(window.location.pathname).toBe('/settings')
+})
+
+test('identities screen links to settings when identities exist', async () => {
+  window.history.replaceState({}, '', '/')
+  const { container } = render(() => (
+    <App
+      vault={fakeVault({ kind: 'unlocked', vault: VAULT })}
+      session={fakeSession()}
+    />
+  ))
+  await waitFor(() => {
+    expect(container.querySelector('[data-screen="identities"]')).toBeTruthy()
+  })
+  const link = [...container.querySelectorAll('button')].find((b) =>
+    b.textContent?.includes('Settings'),
+  )
+  expect(link).toBeTruthy()
+})
+
 test('unlock with passkey from locked navigates to the identities list', async () => {
   const { container } = render(() => (
     <App vault={fakeVault({ kind: 'locked' })} session={fakeSession()} />
