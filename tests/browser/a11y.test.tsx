@@ -163,6 +163,27 @@ test('settings: add-identity fields are labelled and the form commits the identi
   await waitFor(() => expect(calls.save).toBe(1))
 })
 
+test('settings: identicon placeholder stays hidden until name + passphrase yield a figure', async () => {
+  window.history.replaceState({}, '', '/settings')
+  render(() => (
+    <App
+      vault={fakeVault({ kind: 'unlocked', vault: VAULT }, newCalls())}
+      session={fakeSession()}
+    />
+  ))
+  const hint = await screen.findByText(
+    'Add an identity (passphrase is your Spectre secret):',
+  )
+  const icon = hint.closest('form')!.querySelector('span[aria-hidden="true"]')!
+  expect(icon.classList.contains('invisible')).toBe(true)
+  await fill(await screen.findByLabelText('Full name'), 'Ada Lovelace')
+  await fill(
+    await screen.findByLabelText('Passphrase'),
+    'correct-horse-battery',
+  )
+  await waitFor(() => expect(icon.classList.contains('invisible')).toBe(false))
+})
+
 test('join: invitation field is labelled inside a form with a submit action', async () => {
   window.history.replaceState({}, '', '/join')
   render(() => (

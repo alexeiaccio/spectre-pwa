@@ -48,9 +48,7 @@ export function Identicon(props: { value: () => Identicon; size?: 'lg' }) {
       props.size === 'lg'
         ? 'font-mono text-3xl leading-none'
         : 'font-mono text-xl leading-none'
-    return props.value() === EMPTY_IDENTICON
-      ? `${base} invisible`
-      : base
+    return props.value() === EMPTY_IDENTICON ? `${base} invisible` : base
   }
   return (
     <span
