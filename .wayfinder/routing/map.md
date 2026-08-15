@@ -36,11 +36,11 @@ A **decision + spec** for Spectre Pocket's navigation, plus the **DX harness** t
 - [N6 · Shape of the Screen module](tickets/N6-screen-module-shape.md) — **History mode** + **uuid route**: routes `/setup`, `/locked`, `/`, `/identity/:uuid` (error = screen, not a route; unmatched → redirect `/`). **Screen union** = pure derivation over (VaultStatus, SessionStatus, URL); guard rules enforce app-state (deep link while locked → `/locked` replace; back from identity → `/`). Sub-UI (`editingId`/`recent`/`copiedId`/installPrompt) stays local. **Test surface**: unit table-test over the derivation + browser component tests (render/back/redirect). Spec → `.wayfinder/routing/spec-screen-module.md`.
 - [N7 · The seam's contract with Sync S5/S6](tickets/N7-sync-s5-s6-contract.md) — Join wizard (S5) = **`{ view: 'join' }` union case, internal steps, no per-step URLs**, entry links on setup + locked. Pairing section = inline on identities (no case). S6 migration = distinct **`{ view: 'migrating' }`** case. The seam **never imports iroh/envelope/DEK** — union names views only; Sync ships flow logic behind screen components.
 - [N8 · Screen module skeleton](tickets/N8-screen-module-skeleton.md) — **Prototype landed**: `src/lib/navigation/screen.ts` (pure `deriveScreen` → `{ screen, redirect }`), 22 unit table-tests, throwaway `AppShell.tsx` on `@solidjs/router` next.16 (`createRouter`/`defineRoutes`/`browserHistory`), 2 browser tests. Toolchain moved per N4 (rc.0 + plugin next.27 + router next.16) — **56 tests + build + lint green**. **Real finding**: Solid 2 rc `STRICT_READ_UNTRACKED` forces keyed `<Switch>/<Match>` over a body-level switch. Guard redirects all `replace:true`, no-op at target, `booting` never redirects.
+- **CI wiring (2026-08-15)** — `.github/workflows/ci.yml` landed (the routing map's last fog item): oxlint, oxfmt `--check`, tsc, vitest unit + browser (playwright chromium install + cache), and the build — on push + PR.
 
 ## Not yet specified
 
 - **Invitation deep links / Web Share target** (opening a QR invite from outside the app) — needs Sync S5 before it's sharp enough to ticket. The seam's URL surface is ready (`/join` root, query read on boot, per N1 §(b)).
-- **CI wiring** for lint + vitest (browser needs `npx playwright install --with-deps chromium`, cache `~/.cache/ms-playwright`) — no CI config exists in the repo today.
 
 ## Spec
 

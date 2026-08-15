@@ -38,7 +38,7 @@ Working peer-to-peer vault sync across multiple installs of Spectre Pocket: iden
 
 ## Not yet specified
 
-- Sync status UX (last-synced at, pending changes, relay reachability) — depends on the S7 upstream question (browser sync reliability) before it's sharp enough to build.
+- Sync status UX (last-synced at, pending changes, relay reachability) — depends on the S7 upstream question (browser sync reliability) before it's sharp enough to build. Tracked for revival under **Sync-bg** (`.wayfinder/sync-bg/map.md`), which owns background/periodic sync + the pending-changes signal this UX needs.
 
 ## Decisions so far (2026-08-14)
 
@@ -47,6 +47,6 @@ Working peer-to-peer vault sync across multiple installs of Spectre Pocket: iden
 ## Out of scope
 
 - The Spectre **passphrase** — never leaves the device, never syncs (typed per launch).
-- Background/periodic/offline-queue sync — foreground + online only.
+- **Background/periodic sync** — foreground + online only. Revived as its own effort: **Sync-bg** (`.wayfinder/sync-bg/map.md`).
 - WebRTC or direct browser-to-browser connections (impossible in browser sandbox today).
 - Sharing anything beyond the vault (no cloud store, no cross-user sync).

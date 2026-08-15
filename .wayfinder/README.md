@@ -7,11 +7,12 @@ This repo uses the **local-markdown** issue tracker (no external tracker configu
 Each effort gets its own self-contained directory under `.wayfinder/` (map + `tickets/` + `research/` + `prototypes/`). The v1 effort lives at the root (`.wayfinder/map.md`); later efforts live in their own dirs.
 
 - **v1 — Spectre Pocket**: `.wayfinder/map.md` (delivered).
-- **Sync — Spectre Pocket Sync**: `.wayfinder/sync/map.md` (in progress).
-- **Routing — navigation seam + DX tooling**: `.wayfinder/routing/map.md` (charting).
-- **S6 — vault-store migration to sync records**: `.wayfinder/s6/map.md` (charting).
-- **Kobalte — form components adoption**: `.wayfinder/kobalte/map.md` (in progress).
-- **Screens — per-route screens + kebab-case files**: `.wayfinder/screens/map.md` (in progress).
+- **Sync — Spectre Pocket Sync**: `.wayfinder/sync/map.md` (delivered).
+- **Routing — navigation seam + DX tooling**: `.wayfinder/routing/map.md` (delivered).
+- **S6 — vault-store migration to sync records**: `.wayfinder/s6/map.md` (delivered).
+- **Kobalte — form components adoption**: `.wayfinder/kobalte/map.md` (delivered).
+- **Screens — per-route screens + kebab-case files**: `.wayfinder/screens/map.md` (delivered).
+- **Sync-bg — background & periodic sync**: `.wayfinder/sync-bg/map.md` (charting).
 
 ## Where things live
 

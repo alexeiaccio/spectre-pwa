@@ -39,15 +39,15 @@
 ## Not yet specified
 
 - **Sync status UX** (last-synced at, pending changes, relay reachability) — needs live sync reliability to be meaningful; wait on M2.
-- **Existing-vault adopt-code join** (S5 follow-up) — needs the record bridge (M5/M8) before it can merge.
-- **Invitation deep links / Web Share target** and **QR generation** for invitations.
+- **Existing-vault adopt-code join — LANDED (2026-08-15).** `adoptHostCode` in `records.ts` (rotation under the host's code + B's existing passkey, merge by uuid, local wins on conflict); `/join` now reachable from locked/unlocked; JoinScreen gains a local-unlock step (locked) + an adopt branch, and hands off to `/` on success (route-not-screen, per the routing map). Unit-tested. Removed from fog.
+- **Invitation deep links / Web Share target** — QR + copy-string invitations landed (2026-08-15, `uqr`); deep links / share-target from outside the app still open.
 - **Native (Node/CLI) relay-side participant** as a fallback if browser sync stays unreliable (S7 option) — a big fork; revisit after M2.
 
 ## Out of scope
 
 - **The v1/v2 blob format + the in-place migration** — dropped (2026-08-15, human: "no users yet"): the app starts fresh at v3. M4 + M10 superseded.
 - The Spectre **passphrase** — never leaves the device, never syncs.
-- **Background/periodic sync** — foreground + online only.
+- **Background/periodic sync** — foreground + online only. Revived as its own effort: **Sync-bg** (`.wayfinder/sync-bg/map.md`).
 - **WebRTC / direct browser-to-browser** connections.
 - **Cross-user sharing** — anything beyond the user's own devices.
 - **Fixing the upstream iroh-docs browser-sync engine** — tracked via M2, not fixable in this repo.

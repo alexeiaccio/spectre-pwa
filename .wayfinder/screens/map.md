@@ -26,7 +26,8 @@ Target shape:
 
 <!-- one line per closed ticket -->
 
-- R1 · Routes-per-screen vs single-shell — **done**. Each path mounts its own route component (`src/routes/`); the `ScreenShell`/7-`Match` switch is gone. `deriveScreen` still drives redirects via `useScreen()`; routes render directly (identity guards uuid, catch-all handles booting/error). Verified locked→unlock→identities flow + 80 tests.
+- R1 · Routes-per-screen vs single-shell — **done, as a route/screen merge**. The `ScreenShell`/7-`Match` switch is gone; screens are now **self-contained route components** — each reads `FlowContext` + `useScreen()` directly and is mounted straight in the router (`src/app.tsx`), so the `src/routes/` wrapper layer was deleted entirely. `deriveScreen` still drives redirects via `useScreen()`; `identity-screen` resolves its uuid from the URL, `error-screen` is the `/*` catch-all (booting/error). `FlowContext`/`FlowApi`/`useScreen` live in `src/lib/flow.ts`. Verified locked→unlock→identities flow + 80 tests.
+- **Knip (2026-08-15): unused-file + dead-export cleanup.** Installed + configured `knip.json` (tests, spike, wasm counted as usage; green `npm run knip`). Deleted the obsolete `src/routes/` and `src/prototypes/screen-module/app-shell.tsx` (the old shell prototype this effort replaced), plus 22 dead exports (schema re-exports, `VaultStorageService` DI trio, hex helpers, spectre constants).
 - **Framework check (2026-08-15): no meta-framework / compiler swap.** `solid-start@next` (0.1.0-alpha.105) is a stale Solid-1-era alpha (peers `solid-js@^1.5`, `vite@^3`, `router@0.4`) and is SSR/server-oriented — wrong for an offline-only PWA. `dom-expressions@next` is already used transitively via `vite-plugin-solid`. `@tanstack/solid-start@beta` exists for Solid 2 but adds server machinery we don't need. Decision: stay on `@solidjs/router@2` + Vite, client-only. R1 continues.
 
 ## Tickets
