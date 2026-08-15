@@ -7,6 +7,7 @@ import {
   ErrorText,
   Hint,
   Input,
+  QrScanner,
   Text,
   Textarea,
 } from '../components/ui/index.ts'
@@ -70,6 +71,7 @@ const waitForValue = (
 export default function JoinScreen() {
   const { api, navigate } = useScreen()
   const [step, setStep] = createSignal<JoinStep>('invite')
+  const [inviteMode, setInviteMode] = createSignal<'paste' | 'scan'>('paste')
   const [ticket, setTicket] = createSignal('')
   const [code, setCode] = createSignal('')
   const [localCode, setLocalCode] = createSignal('')
@@ -335,9 +337,7 @@ export default function JoinScreen() {
           <Input
             label="Recovery code"
             value={localCode()}
-            onInput={(e) =>
-              setLocalCode((e.target as HTMLInputElement).value)
-            }
+            onInput={(e) => setLocalCode((e.target as HTMLInputElement).value)}
             placeholder="recovery code"
             type="password"
             autocomplete="current-password"
@@ -353,33 +353,61 @@ export default function JoinScreen() {
       </Show>
 
       <Show when={step() === 'invite'}>
-        <form
-          class="flex flex-col gap-2"
-          onSubmit={(e) => {
-            e.preventDefault()
-            void startJoin()
-          }}
-        >
-          <Text>
-            Paste the invitation from your other device (created under “Sync
-            with another device”):
-          </Text>
-          <Textarea
-            label="Invitation string"
-            value={ticket()}
-            onInput={(e) =>
-              setTicket((e.target as HTMLTextAreaElement).value)
+        <Text>
+          Enter the invitation from your other device (created under “Sync with
+          another device”):
+        </Text>
+        <div class="flex gap-2">
+          <button
+            class={
+              inviteMode() === 'paste'
+                ? 'rounded border border-teal-spectre px-3 py-1 text-xs text-teal-spectre'
+                : 'rounded border border-surface-700 px-3 py-1 text-xs text-slate-400 hover:text-slate-200'
             }
-            placeholder="invitation string"
-          />
-          <Button
-            variant="primary"
-            type="submit"
-            disabled={!ticket().trim()}
+            onClick={() => setInviteMode('paste')}
           >
-            Join
-          </Button>
-        </form>
+            Paste
+          </button>
+          <button
+            class={
+              inviteMode() === 'scan'
+                ? 'rounded border border-teal-spectre px-3 py-1 text-xs text-teal-spectre'
+                : 'rounded border border-surface-700 px-3 py-1 text-xs text-slate-400 hover:text-slate-200'
+            }
+            onClick={() => setInviteMode('scan')}
+          >
+            Scan QR
+          </button>
+        </div>
+        <Show when={inviteMode() === 'scan'}>
+          <QrScanner
+            onScan={(text) => {
+              setTicket(text)
+              void startJoin()
+            }}
+          />
+        </Show>
+        <Show when={inviteMode() === 'paste'}>
+          <form
+            class="flex flex-col gap-2"
+            onSubmit={(e) => {
+              e.preventDefault()
+              void startJoin()
+            }}
+          >
+            <Textarea
+              label="Invitation string"
+              value={ticket()}
+              onInput={(e) =>
+                setTicket((e.target as HTMLTextAreaElement).value)
+              }
+              placeholder="invitation string"
+            />
+            <Button variant="primary" type="submit" disabled={!ticket().trim()}>
+              Join
+            </Button>
+          </form>
+        </Show>
       </Show>
 
       <Show when={step() === 'syncing'}>
@@ -411,11 +439,7 @@ export default function JoinScreen() {
             type="password"
             autocomplete="current-password"
           />
-          <Button
-            variant="primary"
-            type="submit"
-            disabled={code().length < 8}
-          >
+          <Button variant="primary" type="submit" disabled={code().length < 8}>
             Unlock &amp; join
           </Button>
         </form>

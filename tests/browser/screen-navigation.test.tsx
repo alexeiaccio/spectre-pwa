@@ -141,5 +141,5 @@ test('deep link to /join from needs-setup renders the join screen', async () => 
     expect(container.querySelector('[data-screen="join"]')).toBeTruthy()
   })
   expect(window.location.pathname).toBe('/join')
-  expect(container.textContent).toContain('Paste the invitation')
+  expect(container.textContent).toContain('Enter the invitation')
 })

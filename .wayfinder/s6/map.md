@@ -40,7 +40,7 @@
 
 - **Sync status UX** (last-synced at, pending changes, relay reachability) — needs live sync reliability to be meaningful; wait on M2.
 - **Existing-vault adopt-code join — LANDED (2026-08-15).** `adoptHostCode` in `records.ts` (rotation under the host's code + B's existing passkey, merge by uuid, local wins on conflict); `/join` now reachable from locked/unlocked; JoinScreen gains a local-unlock step (locked) + an adopt branch, and hands off to `/` on success (route-not-screen, per the routing map). Unit-tested. Removed from fog.
-- **Invitation deep links / Web Share target** — QR + copy-string invitations landed (2026-08-15, `uqr`); deep links / share-target from outside the app still open.
+- **Invitation deep links / Web Share target** — QR + copy-string invitations landed (2026-08-15, `uqr`); **QR scanning landed (2026-08-15, `@zxing/browser`)** — `/join` Paste/Scan-QR toggle. Deep links / share-target from outside the app still open.
 - **Native (Node/CLI) relay-side participant** as a fallback if browser sync stays unreliable (S7 option) — a big fork; revisit after M2.
 
 ## Out of scope
