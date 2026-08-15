@@ -1,9 +1,14 @@
 import { createSignal, Show } from 'solid-js'
 import { Clock, Effect } from 'effect'
 import {
-  Input as TextFieldInput,
-  Root as TextFieldRoot,
-} from '@kobalte/core/text-field'
+  Accent,
+  Button,
+  ErrorText,
+  Hint,
+  Input,
+  Text,
+  Textarea,
+} from '../components/ui/index.ts'
 import {
   SYNC_EXPERIMENTAL,
   SyncUnavailableError,
@@ -208,80 +213,68 @@ export default function JoinScreen(props: {
         </p>
       </Show>
       <Show when={SYNC_EXPERIMENTAL}>
-        <p class="text-xs text-slate-500">
+        <Hint>
           Browser sync is experimental (upstream iroh-docs wasm); the other
           device must stay online. If nothing arrives, retry.
-        </p>
+        </Hint>
       </Show>
       <Show when={error()}>
-        <p class="text-sm text-red-400">{error()}</p>
+        <ErrorText>{error()}</ErrorText>
       </Show>
 
       <Show when={step() === 'invite'}>
-        <p class="text-sm text-slate-400">
+        <Text>
           Paste the invitation from your other device (created under “Sync with
           another device”):
-        </p>
-        <textarea
-          class="min-h-24 tap rounded border border-surface-700 bg-surface-800 px-2 py-1 text-sm text-slate-100"
+        </Text>
+        <Textarea
           value={ticket()}
           onInput={(e) => setTicket((e.target as HTMLTextAreaElement).value)}
           placeholder="invitation string"
         />
-        <button
-          class="tap rounded bg-teal-spectre px-3 py-2 text-sm font-medium text-black disabled:opacity-40"
+        <Button
+          variant="primary"
           disabled={!ticket().trim()}
           onClick={() => void startJoin()}
         >
           Join
-        </button>
+        </Button>
       </Show>
 
       <Show when={step() === 'syncing'}>
-        <p class="text-sm text-teal-spectre">
+        <Accent>
           {busy() ? 'Connecting to the other device…' : 'Waiting for the host…'}
-        </p>
-        <button
-          class="tap rounded bg-teal-spectre px-3 py-2 text-sm font-medium text-black"
-          onClick={() => void startJoin()}
-        >
+        </Accent>
+        <Button variant="primary" onClick={() => void startJoin()}>
           Retry
-        </button>
+        </Button>
       </Show>
 
       <Show when={step() === 'recovery'}>
-        <p class="text-sm text-slate-400">
+        <Text>
           This vault is passphrase-locked. Enter the recovery code from the
           other device (verified against the host's envelope):
-        </p>
-        <TextFieldRoot>
-          <TextFieldInput
-            class="tap w-full rounded border border-surface-700 bg-surface-800 px-2 py-1 text-sm text-slate-100"
-            value={code()}
-            onInput={(e) => setCode((e.target as HTMLInputElement).value)}
-            placeholder="recovery code"
-            type="password"
-          />
-        </TextFieldRoot>
-        <button
-          class="tap rounded bg-teal-spectre px-3 py-2 text-sm font-medium text-black disabled:opacity-40"
+        </Text>
+        <Input
+          value={code()}
+          onInput={(e) => setCode((e.target as HTMLInputElement).value)}
+          placeholder="recovery code"
+          type="password"
+        />
+        <Button
+          variant="primary"
           disabled={code().length < 8}
           onClick={() => void submitCode()}
         >
           Unlock &amp; join
-        </button>
+        </Button>
       </Show>
 
       <Show when={step() === 'enrolling'}>
-        <p class="text-sm text-slate-400">
-          Last step — enroll a passkey for this device:
-        </p>
-        <button
-          class="tap rounded bg-teal-spectre px-3 py-2 text-sm font-medium text-black"
-          onClick={() => void enrollAndFinish()}
-        >
+        <Text>Last step — enroll a passkey for this device:</Text>
+        <Button variant="primary" onClick={() => void enrollAndFinish()}>
           {busy() ? 'Enrolling…' : 'Enroll passkey'}
-        </button>
+        </Button>
       </Show>
     </div>
   )

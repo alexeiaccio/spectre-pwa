@@ -1,4 +1,7 @@
-import { Input as NumberFieldInput, Root as NumberFieldRoot } from '@kobalte/core/number-field'
+import {
+  Input as NumberFieldInput,
+  Root as NumberFieldRoot,
+} from '@kobalte/core/number-field'
 
 /** B/W-themed numeric input (Kobalte NumberField), compact for a form row. */
 export function NumberField(props: {

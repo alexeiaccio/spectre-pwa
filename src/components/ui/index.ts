@@ -1,6 +1,8 @@
 export { Button } from './Button.tsx'
 export { Input } from './Input.tsx'
+export { Textarea } from './Textarea.tsx'
 export { Card } from './Card.tsx'
 export { Text, Hint, ErrorText, Accent } from './Text.tsx'
 export { Select } from './Select.tsx'
 export { NumberField } from './NumberField.tsx'
+export { Disclosure } from './Disclosure.tsx'

@@ -1,8 +1,5 @@
 import { createSignal } from 'solid-js'
-import {
-  Input as TextFieldInput,
-  Root as TextFieldRoot,
-} from '@kobalte/core/text-field'
+import { Button, Input, Text } from '../components/ui/index.ts'
 
 export default function SetupScreen(props: {
   onSubmit: (code: string) => void
@@ -11,24 +8,18 @@ export default function SetupScreen(props: {
   const [code, setCode] = createSignal('')
   return (
     <div data-screen="setup" class="flex flex-col gap-4">
-      <p class="text-sm text-slate-400">
+      <Text>
         First run — create your vault with a passkey. Add a recovery code as a
         second way in:
-      </p>
-      <TextFieldRoot>
-        <TextFieldInput
-          class="tap w-full rounded border border-surface-700 bg-surface-800 px-2 py-1 text-sm text-slate-100"
-          value={code()}
-          onInput={(e) => setCode((e.target as HTMLInputElement).value)}
-          placeholder="recovery code"
-        />
-      </TextFieldRoot>
-      <button
-        class="tap rounded bg-teal-spectre px-3 py-2 text-sm font-medium text-black"
-        onClick={() => props.onSubmit(code())}
-      >
+      </Text>
+      <Input
+        value={code()}
+        onInput={(e) => setCode((e.target as HTMLInputElement).value)}
+        placeholder="recovery code"
+      />
+      <Button variant="primary" onClick={() => props.onSubmit(code())}>
         Create vault
-      </button>
+      </Button>
       <button
         class="text-xs text-slate-500 underline hover:text-slate-300"
         onClick={() => props.onJoin()}

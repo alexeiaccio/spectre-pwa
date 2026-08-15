@@ -1,5 +1,10 @@
 import { Show } from 'solid-js'
-import { Input, NumberField, Select } from '../components/ui/index.ts'
+import {
+  Disclosure,
+  Input,
+  NumberField,
+  Select,
+} from '../components/ui/index.ts'
 import type { Site } from '../lib/vault/schema.ts'
 
 export const PURPOSE_LABEL: Record<Site['purpose'], string> = {
@@ -50,7 +55,52 @@ export function SiteFields(props: {
   draft: SiteFormState
   setDraft: (u: (d: SiteFormState) => SiteFormState) => void
   namePlaceholder: string
+  /** When true, the purpose/template/counter row hides behind a disclosure (add mode). */
+  collapsible?: boolean
 }) {
+  const selectors = () => (
+    <div class="flex items-stretch gap-2">
+      <div class="min-w-0 flex-1">
+        <Select
+          options={PURPOSE_OPTIONS}
+          value={
+            PURPOSE_OPTIONS.find((o) => o.value === props.draft.purpose) ??
+            PURPOSE_OPTIONS[0]
+          }
+          onChange={(opt) => {
+            const purpose = opt.value
+            const template =
+              purpose === 'login' ? 30 : purpose === 'answer' ? 31 : 17
+            props.setDraft((d) => ({ ...d, purpose, template }))
+          }}
+        />
+      </div>
+      <div class="min-w-0 flex-1">
+        <Select
+          options={TEMPLATE_OPTIONS}
+          value={
+            TEMPLATE_OPTIONS.find((o) => o.value === props.draft.template) ??
+            TEMPLATE_OPTIONS[0]
+          }
+          onChange={(opt) =>
+            props.setDraft((d) => ({ ...d, template: opt.value }))
+          }
+        />
+      </div>
+      <NumberField
+        value={props.draft.counter}
+        minValue={1}
+        title="Spectre counter"
+        onChange={(v) =>
+          props.setDraft((d) => ({
+            ...d,
+            counter: Math.max(1, v),
+          }))
+        }
+      />
+    </div>
+  )
+
   return (
     <>
       <Input
@@ -63,46 +113,9 @@ export function SiteFields(props: {
         }
         placeholder={props.namePlaceholder}
       />
-      <div class="flex items-stretch gap-2">
-        <div class="min-w-0 flex-1">
-          <Select
-            options={PURPOSE_OPTIONS}
-            value={
-              PURPOSE_OPTIONS.find((o) => o.value === props.draft.purpose) ??
-              PURPOSE_OPTIONS[0]
-            }
-            onChange={(opt) => {
-              const purpose = opt.value
-              const template =
-                purpose === 'login' ? 30 : purpose === 'answer' ? 31 : 17
-              props.setDraft((d) => ({ ...d, purpose, template }))
-            }}
-          />
-        </div>
-        <div class="min-w-0 flex-1">
-          <Select
-            options={TEMPLATE_OPTIONS}
-            value={
-              TEMPLATE_OPTIONS.find((o) => o.value === props.draft.template) ??
-              TEMPLATE_OPTIONS[0]
-            }
-            onChange={(opt) =>
-              props.setDraft((d) => ({ ...d, template: opt.value }))
-            }
-          />
-        </div>
-        <NumberField
-          value={props.draft.counter}
-          minValue={1}
-          title="Spectre counter"
-          onChange={(v) =>
-            props.setDraft((d) => ({
-              ...d,
-              counter: Math.max(1, v),
-            }))
-          }
-        />
-      </div>
+      <Show when={props.collapsible} fallback={selectors()}>
+        <Disclosure label="More options">{selectors()}</Disclosure>
+      </Show>
       <Show when={props.draft.purpose === 'answer'}>
         <Input
           value={props.draft.answer}

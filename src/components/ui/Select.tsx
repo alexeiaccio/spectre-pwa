@@ -39,7 +39,7 @@ export function Select<T extends SelectOption>(props: {
         </SelectItem>
       )}
     >
-      <SelectTrigger class="tap flex min-w-0 w-full items-center justify-between gap-2 rounded border border-surface-700 bg-surface-800 px-2 py-1 text-sm text-slate-100">
+      <SelectTrigger class="flex tap w-full min-w-0 items-center justify-between gap-2 rounded border border-surface-700 bg-surface-800 px-2 py-1 text-sm text-slate-100">
         <SelectValue<T>>
           {(state) => state.selectedOption()?.label ?? '…'}
         </SelectValue>

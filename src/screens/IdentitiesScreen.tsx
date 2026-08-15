@@ -1,18 +1,12 @@
 import { createSignal, For, Show } from 'solid-js'
 import {
-  Content as SelectContent,
-  Item as SelectItem,
-  ItemLabel as SelectItemLabel,
-  Listbox as SelectListbox,
-  Portal as SelectPortal,
-  Root as SelectRoot,
-  Trigger as SelectTrigger,
-  Value as SelectValue,
-} from '@kobalte/core/select'
-import {
-  Input as TextFieldInput,
-  Root as TextFieldRoot,
-} from '@kobalte/core/text-field'
+  Button,
+  Card,
+  Hint,
+  Input,
+  Select,
+  Text,
+} from '../components/ui/index.ts'
 import type { Identity, Prefs, Vault } from '../lib/vault/schema.ts'
 
 interface AutoLockOption {
@@ -69,9 +63,7 @@ export default function IdentitiesScreen(props: {
 
   return (
     <div data-screen="identities" class="flex flex-col gap-4">
-      <p class="text-sm text-slate-400">
-        Choose an identity (passphrase is asked when you open it):
-      </p>
+      <Text>Choose an identity (passphrase is asked when you open it):</Text>
       <div class="flex flex-col gap-2">
         <For each={props.vault.identities}>
           {(identity) => (
@@ -97,39 +89,31 @@ export default function IdentitiesScreen(props: {
           )}
         </For>
       </div>
-      <div class="flex flex-col gap-2 rounded border border-dashed border-surface-700 p-3">
-        <p class="text-sm text-slate-500">
-          Add an identity (passphrase is your Spectre secret):
-        </p>
-        <TextFieldRoot>
-          <TextFieldInput
-            class="tap w-full rounded border border-surface-700 bg-surface-800 px-2 py-1 text-sm text-slate-100"
-            value={newIdentity().fullName}
-            onInput={(e) =>
-              setNewIdentity((n) => ({
-                ...n,
-                fullName: (e.target as HTMLInputElement).value,
-              }))
-            }
-            placeholder="full name"
-          />
-        </TextFieldRoot>
-        <TextFieldRoot>
-          <TextFieldInput
-            class="tap w-full rounded border border-surface-700 bg-surface-800 px-2 py-1 text-sm text-slate-100"
-            value={newIdentity().passphrase}
-            onInput={(e) =>
-              setNewIdentity((n) => ({
-                ...n,
-                passphrase: (e.target as HTMLInputElement).value,
-              }))
-            }
-            placeholder="passphrase (min 8)"
-            type="password"
-          />
-        </TextFieldRoot>
-        <button
-          class="tap rounded bg-teal-spectre px-3 py-2 text-sm font-medium text-black disabled:opacity-40"
+      <Card variant="dashed">
+        <Hint>Add an identity (passphrase is your Spectre secret):</Hint>
+        <Input
+          value={newIdentity().fullName}
+          onInput={(e) =>
+            setNewIdentity((n) => ({
+              ...n,
+              fullName: (e.target as HTMLInputElement).value,
+            }))
+          }
+          placeholder="full name"
+        />
+        <Input
+          value={newIdentity().passphrase}
+          onInput={(e) =>
+            setNewIdentity((n) => ({
+              ...n,
+              passphrase: (e.target as HTMLInputElement).value,
+            }))
+          }
+          placeholder="passphrase (min 8)"
+          type="password"
+        />
+        <Button
+          variant="primary"
           disabled={newIdentity().passphrase.length < 8}
           onClick={() =>
             props.onSaveIdentity(
@@ -139,24 +123,19 @@ export default function IdentitiesScreen(props: {
           }
         >
           Add identity
-        </button>
-      </div>
-      <div class="flex flex-col gap-2 rounded border border-dashed border-surface-700 p-3">
-        <p class="text-sm text-slate-500">
+        </Button>
+      </Card>
+      <Card variant="dashed">
+        <Hint>
           Lost your passkey? Re-enroll a new one (rotates the vault key):
-        </p>
-        <TextFieldRoot>
-          <TextFieldInput
-            class="tap w-full rounded border border-surface-700 bg-surface-800 px-2 py-1 text-sm text-slate-100"
-            value={reEnrollCode()}
-            onInput={(e) =>
-              setReEnrollCode((e.target as HTMLInputElement).value)
-            }
-            placeholder="recovery code"
-          />
-        </TextFieldRoot>
-        <button
-          class="tap rounded bg-teal-spectre px-3 py-2 text-sm font-medium text-black disabled:opacity-40"
+        </Hint>
+        <Input
+          value={reEnrollCode()}
+          onInput={(e) => setReEnrollCode((e.target as HTMLInputElement).value)}
+          placeholder="recovery code"
+        />
+        <Button
+          variant="primary"
           disabled={reEnrollCode().length < 8}
           onClick={() => {
             void props.onReEnroll(reEnrollCode()).then((v) => {
@@ -165,67 +144,40 @@ export default function IdentitiesScreen(props: {
           }}
         >
           Replace passkey
-        </button>
-      </div>
-      <div class="flex flex-col gap-2 rounded border border-dashed border-surface-700 p-3">
-        <p class="text-sm text-slate-500">Auto-lock after hiding the app:</p>
-        <SelectRoot<AutoLockOption>
+        </Button>
+      </Card>
+      <Card variant="dashed">
+        <Hint>Auto-lock after hiding the app:</Hint>
+        <Select
           options={AUTO_LOCK_OPTIONS}
-          optionValue="value"
-          optionTextValue="label"
           value={
             AUTO_LOCK_OPTIONS.find(
               (o) => o.value === props.prefs().autoLockMinutes,
             ) ?? AUTO_LOCK_OPTIONS[0]
           }
-          onChange={(opt) => {
-            if (opt) props.onSetAutoLock(opt.value)
-          }}
-          itemComponent={(p) => (
-            <SelectItem
-              item={p.item}
-              class="flex tap items-center justify-between gap-2 px-3 py-2 text-sm text-slate-100 data-[highlighted]:bg-surface-700 data-[selected]:text-black"
-            >
-              <SelectItemLabel>{p.item.rawValue.label}</SelectItemLabel>
-            </SelectItem>
-          )}
-        >
-          <SelectTrigger class="flex tap w-full items-center justify-between rounded border border-surface-700 bg-surface-800 px-2 py-1 text-sm text-slate-100">
-            <SelectValue<AutoLockOption>>
-              {(state) => state.selectedOption()?.label ?? '…'}
-            </SelectValue>
-            <span class="text-xs text-slate-500">▾</span>
-          </SelectTrigger>
-          <SelectPortal>
-            <SelectContent class="z-10 min-w-[12rem] overflow-hidden rounded border border-surface-700 bg-surface-800 p-1 shadow-lg">
-              <SelectListbox />
-            </SelectContent>
-          </SelectPortal>
-        </SelectRoot>
-      </div>
-      <div class="flex flex-col gap-2 rounded border border-dashed border-surface-700 p-3">
-        <p class="text-sm text-slate-500">
+          onChange={(opt) => props.onSetAutoLock(opt.value)}
+        />
+      </Card>
+      <Card variant="dashed">
+        <Hint>
           Sync with another device (experimental — the other device scans or
           pastes this invitation):
-        </p>
+        </Hint>
         <Show when={!invitation()}>
-          <button
-            class="tap rounded bg-teal-spectre px-3 py-2 text-sm font-medium text-black disabled:opacity-40"
+          <Button
+            variant="primary"
             disabled={pairing()}
             onClick={() => void onCreateInvitation()}
           >
             {pairing() ? 'Creating…' : 'Create invitation'}
-          </button>
+          </Button>
         </Show>
         <Show when={invitation()}>
           <p class="text-xs break-all text-slate-400">{invitation()}</p>
           <div class="flex items-center gap-2">
-            <button
-              class="tap rounded border border-surface-700 px-3 py-2 text-xs text-slate-300"
-              onClick={onCopyInvitation}
-            >
+            <Button variant="secondary" onClick={onCopyInvitation}>
               {copied() ? 'copied' : 'Copy invitation'}
-            </button>
+            </Button>
             <button
               class="text-xs text-slate-500 underline hover:text-slate-300"
               onClick={() => setInvitation('')}
@@ -237,7 +189,7 @@ export default function IdentitiesScreen(props: {
         <Show when={pairError()}>
           <p class="text-xs text-red-400">{pairError()}</p>
         </Show>
-      </div>
+      </Card>
     </div>
   )
 }

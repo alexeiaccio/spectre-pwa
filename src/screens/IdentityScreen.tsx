@@ -8,9 +8,13 @@ import {
   Show,
 } from 'solid-js'
 import {
-  Input as TextFieldInput,
-  Root as TextFieldRoot,
-} from '@kobalte/core/text-field'
+  Accent,
+  Button,
+  Card,
+  Hint,
+  Input,
+  Text,
+} from '../components/ui/index.ts'
 import { PURPOSE_LABEL, NEW_SITE_DRAFT, SiteFields } from './SiteFields.tsx'
 import type { SiteFormState } from './SiteFields.tsx'
 import { copyWithAutoClear } from '../lib/lifecycle.ts'
@@ -81,7 +85,6 @@ export default function IdentityScreen(props: {
       <p class="text-sm text-red-400">{s.message}</p>
     ) : null
   })
-
   const onUnlockIdentity = async (): Promise<void> => {
     const done = await props.onUnlockIdentity(props.identity, passphrase())
     if (done) {
@@ -154,22 +157,18 @@ export default function IdentityScreen(props: {
   }
 
   const addSiteBlock = () => (
-    <div class="flex flex-col gap-2 rounded border border-dashed border-surface-700 p-3">
-      <p class="text-sm text-slate-500">
-        Add a site (derives on demand, no stored secrets):
-      </p>
+    <Card variant="dashed">
+      <Hint>Add a site (derives on demand, no stored secrets):</Hint>
       <SiteFields
         draft={newSite()}
         setDraft={setNewSite}
         namePlaceholder="site name, e.g. twitter.com"
+        collapsible
       />
-      <button
-        class="tap rounded bg-teal-spectre px-3 py-2 text-sm font-medium text-black"
-        onClick={() => void onAddSite()}
-      >
+      <Button variant="primary" onClick={() => void onAddSite()}>
         Add site
-      </button>
-    </div>
+      </Button>
+    </Card>
   )
 
   return (
@@ -196,27 +195,19 @@ export default function IdentityScreen(props: {
       >
         <div class="flex flex-col gap-2">
           {errorMsg()}
-          <p class="text-sm text-slate-400">
+          <Text>
             This identity is passphrase-locked. The secret is derived once per
             session:
-          </p>
-          <TextFieldRoot>
-            <TextFieldInput
-              class="tap w-full rounded border border-surface-700 bg-surface-800 px-2 py-1 text-sm text-slate-100"
-              value={passphrase()}
-              onInput={(e) =>
-                setPassphrase((e.target as HTMLInputElement).value)
-              }
-              placeholder="Spectre passphrase"
-              type="password"
-            />
-          </TextFieldRoot>
-          <button
-            class="tap rounded bg-teal-spectre px-3 py-2 text-sm font-medium text-black"
-            onClick={() => void onUnlockIdentity()}
-          >
+          </Text>
+          <Input
+            value={passphrase()}
+            onInput={(e) => setPassphrase((e.target as HTMLInputElement).value)}
+            placeholder="Spectre passphrase"
+            type="password"
+          />
+          <Button variant="primary" onClick={() => void onUnlockIdentity()}>
             Unlock identity
-          </button>
+          </Button>
         </div>
       </Show>
 
@@ -224,15 +215,15 @@ export default function IdentityScreen(props: {
         when={effective().kind === 'ready'}
         fallback={
           <Show when={effective().kind === 'working'}>
-            <p class="text-sm text-teal-spectre">Deriving…</p>
+            <Accent>Deriving…</Accent>
           </Show>
         }
       >
         <div class="flex flex-col gap-2">
-          <p class="text-xs text-slate-500">
+          <Hint>
             Tap a site to reveal it; tap the value to copy (auto-clears after
             30s).
-          </p>
+          </Hint>
           <For each={props.identity.sites}>
             {(site) => {
               const revealed = createMemo(() => recent()?.site.id === site.id)
@@ -281,18 +272,15 @@ export default function IdentityScreen(props: {
                         namePlaceholder="site name"
                       />
                       <div class="flex gap-2">
-                        <button
-                          class="tap rounded bg-teal-spectre px-3 py-1 text-xs font-medium text-black"
+                        <Button
+                          variant="primary"
                           onClick={() => void onUpdateSite(site)}
                         >
                           Save
-                        </button>
-                        <button
-                          class="tap rounded border border-surface-700 px-3 py-1 text-xs text-slate-300"
-                          onClick={onCancelEdit}
-                        >
+                        </Button>
+                        <Button variant="secondary" onClick={onCancelEdit}>
                           Cancel
-                        </button>
+                        </Button>
                         <button
                           class="ml-auto tap rounded border border-red-900 px-3 py-1 text-xs text-red-400 hover:text-red-300"
                           onClick={() => void onDeleteSite(site)}

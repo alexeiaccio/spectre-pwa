@@ -1,4 +1,7 @@
-import { Input as TextFieldInput, Root as TextFieldRoot } from '@kobalte/core/text-field'
+import {
+  Input as TextFieldInput,
+  Root as TextFieldRoot,
+} from '@kobalte/core/text-field'
 import type { JSX } from '@solidjs/web'
 
 /** B/W-themed text input (Kobalte TextField). `w-full` + touch target by default. */
