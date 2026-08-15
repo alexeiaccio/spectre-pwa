@@ -1,7 +1,9 @@
+import { Effect } from 'effect'
 // wasm-bindgen emits both a default export (init) and a named `SyncNode`;
 // importing it as the default is the documented `--target web` pattern.
 // oxlint-disable-next-line import/no-named-as-default
 import initSync, { SyncNode } from '../spike/spectre_sync.js'
+import { readNodeIdentity, writeNodeIdentity } from '../vault/storage.ts'
 import { Schema } from 'effect'
 
 /**
@@ -33,6 +35,8 @@ export interface SyncAdapter {
   start(): Promise<void>
   createDoc(): Promise<SyncDocHandle>
   joinDoc(ticket: string): Promise<{ docId: string }>
+  /** Read the doc id out of a ticket without importing or dialing. */
+  docIdFromTicket(ticket: string): string
   subscribe(docId: string, handlers: SyncSubscribeHandlers): Promise<void>
   get(docId: string, key: string): Promise<string | null>
   set(docId: string, key: string, value: string): Promise<void>
@@ -45,7 +49,33 @@ export function createWasmSyncAdapter(): SyncAdapter {
   const ensure = async (): Promise<SyncNode> => {
     if (node) return node
     await initSync()
-    node = await SyncNode.start()
+    const persisted = await Effect.runPromise(readNodeIdentity())
+    if (persisted?.secretKey) {
+      // Stable node id across reloads (M6/M9).
+      node = await SyncNode.start_with_secret_key(persisted.secretKey)
+      if (persisted.authorKey) {
+        try {
+          await node.import_default_author(persisted.authorKey)
+        } catch {
+          // best-effort: a fresh author is minted anyway
+        }
+      }
+    } else {
+      node = await SyncNode.start()
+      // Persist the node identity so a reload keeps the same id (M6/M9).
+      let authorKey: string | undefined
+      try {
+        authorKey = await node.export_default_author()
+      } catch {
+        authorKey = undefined
+      }
+      await Effect.runPromise(
+        writeNodeIdentity({
+          secretKey: node.export_secret_key(),
+          authorKey,
+        }),
+      )
+    }
     return node
   }
 
@@ -63,6 +93,10 @@ export function createWasmSyncAdapter(): SyncAdapter {
       const n = await ensure()
       const docId = await n.join_and_sync(ticket)
       return { docId }
+    },
+    docIdFromTicket: (ticket) => {
+      if (!node) throw new SyncUnavailableError({ message: 'node not started' })
+      return node.doc_id_from_ticket(ticket)
     },
     subscribe: async (docId, handlers) => {
       const n = await ensure()
@@ -95,3 +129,19 @@ export function createWasmSyncAdapter(): SyncAdapter {
 let adapter: SyncAdapter | null = null
 export const getSyncAdapter = (): SyncAdapter =>
   (adapter ??= createWasmSyncAdapter())
+
+/** Persist the vault doc capability (ticket + doc id) in the mirror (M6/M8). */
+export const persistDoc = async (
+  ticket: string,
+  docId: string,
+): Promise<void> => {
+  // Starting the node persists the SecretKey first (if not already), so the
+  // doc capability always lands alongside a stable node identity.
+  await getSyncAdapter().start()
+  const node = (await Effect.runPromise(readNodeIdentity())) ?? {
+    secretKey: '',
+  }
+  await Effect.runPromise(
+    writeNodeIdentity({ ...node, docTicket: ticket, docId }),
+  )
+}

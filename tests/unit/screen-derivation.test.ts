@@ -1,9 +1,9 @@
 import { beforeAll, expect, test } from 'vitest'
 import { deriveScreen } from '../../src/lib/navigation/screen.ts'
 import type { ScreenDerivation } from '../../src/lib/navigation/screen.ts'
-import type { SessionStatus } from '../../src/lib/spectre/useIdentitySession.ts'
+import type { SessionStatus } from '../../src/lib/spectre/use-identity-session.ts'
 import { SpectreSession } from '../../src/lib/spectre/spectre-session.ts'
-import type { VaultStatus } from '../../src/lib/vault/useVault.ts'
+import type { VaultStatus } from '../../src/lib/vault/use-vault.ts'
 import type { Vault } from '../../src/lib/vault/schema.ts'
 
 const VAULT: Vault = { formatVersion: 1, identities: [] }

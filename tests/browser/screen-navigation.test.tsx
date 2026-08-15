@@ -1,11 +1,11 @@
 import { createSignal } from 'solid-js'
 import { beforeEach, expect, test } from 'vitest'
 import { render, waitFor } from '@solidjs/testing-library'
-import App from '../../src/App.tsx'
-import type { SessionApi } from '../../src/lib/spectre/useIdentitySession.ts'
-import type { SessionStatus } from '../../src/lib/spectre/useIdentitySession.ts'
-import type { VaultApi } from '../../src/lib/vault/useVault.ts'
-import type { VaultStatus } from '../../src/lib/vault/useVault.ts'
+import App from '../../src/app.tsx'
+import type { SessionApi } from '../../src/lib/spectre/use-identity-session.ts'
+import type { SessionStatus } from '../../src/lib/spectre/use-identity-session.ts'
+import type { VaultApi } from '../../src/lib/vault/use-vault.ts'
+import type { VaultStatus } from '../../src/lib/vault/use-vault.ts'
 import type { Vault } from '../../src/lib/vault/schema.ts'
 
 const VAULT: Vault = {

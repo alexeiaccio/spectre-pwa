@@ -35,3 +35,12 @@ assigned:
 - No `Switch`/`Match` over screens in `App.tsx` (only the booting/error wrapper if it stays).
 - Each screen file is a self-contained route component reading `FlowContext`.
 - 76 tests still green; browser tests exercise the real router.
+
+## Lock/unlock placement (decision: NOT router middleware)
+
+`@solidjs/router@2.0.0-next.16` has **no middleware API** — only `useBeforeLeave` (a navigation leave-guard). The lock lifecycle (`useLockLifecycle`: visibility/freeze/pagehide events → `allLock`) is **event-driven, not navigation-driven**, so it does not belong in router middleware even if one existed.
+
+Keep the split as-is:
+- **Lifecycle**: `useLockLifecycle(allLock, isOpen, graceMs)` stays in `App` (it owns the vault/session locks).
+- **Redirects**: lock-triggered navigation (after `allLock`, go to `/locked`) is a small `navigate('/locked')` in `allLock`, not router middleware.
+- **Route guards**: the per-route guard (R1) already answers "is this route reachable; else redirect", which covers the locked-vs-unlocked boundary. The redirect *effect* could move to a `useBeforeLeave`/guard helper if we later want route-exit hooks, but the lock event itself stays lifecycle-owned.

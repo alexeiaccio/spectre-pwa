@@ -2,10 +2,12 @@
 id: M10
 title: Migration spike — v2 blob → v3 records on real IndexedDB
 type: prototype
-status: closed
+status: out_of_scope
 blocked_by: [M3, M4]
 assigned: dev
 ---
+
+> **OUT OF SCOPE (2026-08-15):** dropped with M4 — no users, no migration. The spike's recipe is history.
 
 ## Question
 

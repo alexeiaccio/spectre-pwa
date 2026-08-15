@@ -15,10 +15,10 @@ import {
   useLocation,
   useNavigate,
 } from '@solidjs/router'
-import { useVault } from './lib/vault/useVault.ts'
-import type { VaultApi } from './lib/vault/useVault.ts'
-import { useIdentitySession } from './lib/spectre/useIdentitySession.ts'
-import type { SessionApi } from './lib/spectre/useIdentitySession.ts'
+import { useVault } from './lib/vault/use-vault.ts'
+import type { VaultApi } from './lib/vault/use-vault.ts'
+import { useIdentitySession } from './lib/spectre/use-identity-session.ts'
+import type { SessionApi } from './lib/spectre/use-identity-session.ts'
 import { useInstallPrompt } from './lib/pwa.ts'
 import type { BeforeInstallPromptEvent } from './lib/pwa.ts'
 import { clearClipboardTimer, useLockLifecycle } from './lib/lifecycle.ts'
@@ -30,17 +30,17 @@ import {
 } from './lib/vault/mutations.ts'
 import { deriveScreen } from './lib/navigation/screen.ts'
 import type { Identity, Site, Vault } from './lib/vault/schema.ts'
-import Header from './screens/Header.tsx'
-import SetupScreen from './screens/SetupScreen.tsx'
-import LockedScreen from './screens/LockedScreen.tsx'
-import ErrorScreen from './screens/ErrorScreen.tsx'
-import IdentitiesScreen from './screens/IdentitiesScreen.tsx'
-import IdentityScreen from './screens/IdentityScreen.tsx'
-import JoinScreen from './screens/JoinScreen.tsx'
-import MigratingScreen from './screens/MigratingScreen.tsx'
-import type { SiteFormState } from './screens/SiteFields.tsx'
+import Header from './screens/header.tsx'
+import SetupScreen from './screens/setup-screen.tsx'
+import LockedScreen from './screens/locked-screen.tsx'
+import ErrorScreen from './screens/error-screen.tsx'
+import IdentitiesScreen from './screens/identities-screen.tsx'
+import IdentityScreen from './screens/identity-screen.tsx'
+import JoinScreen from './screens/join-screen.tsx'
+import type { SiteFormState } from './screens/site-fields.tsx'
 import { getSyncAdapter } from './lib/sync/adapter.ts'
 import { shareVaultDoc } from './lib/sync/pairing.ts'
+import { syncNow } from './lib/sync/bridge.ts'
 
 const uid = (): string =>
   crypto.randomUUID?.() ??
@@ -87,10 +87,6 @@ function ScreenShell() {
     const s = screen()
     return s.view === 'locked' ? s : undefined
   })
-  const migrating = createMemo(() => {
-    const s = screen()
-    return s.view === 'migrating' ? s : undefined
-  })
   const error = createMemo(() => {
     const s = screen()
     return s.view === 'error' ? s : undefined
@@ -111,6 +107,14 @@ function ScreenShell() {
   // signal directly (Solid 2 rc STRICT_READ_UNTRACKED).
   const identitiesVault = createMemo(() =>
     identitiesCase() ? api.vaultValue() : undefined,
+  )
+  // Inbound half of the bridge: when the identities screen is reached with a
+  // persisted vault doc, re-read known keys into the mirror (experimental).
+  createEffect(
+    () => identitiesCase(),
+    (s) => {
+      if (s) void syncNow()
+    },
   )
   const identityDetail = createMemo(() => {
     const s = identityCase()
@@ -222,16 +226,6 @@ function ScreenShell() {
             onPasskey={() => void api.vault.unlock()}
             onRecovery={(code) => void api.vault.unlockWithRecovery(code)}
             onJoin={() => navigate('/join')}
-          />
-        )}
-      </Match>
-      <Match when={migrating()} keyed>
-        {() => (
-          <MigratingScreen
-            onMigratePasskey={() => void api.vault.migrate({ kind: 'passkey' })}
-            onMigrateRecovery={(code) =>
-              void api.vault.migrate({ kind: 'recovery', code })
-            }
           />
         )}
       </Match>

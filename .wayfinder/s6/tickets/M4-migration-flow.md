@@ -2,10 +2,12 @@
 id: M4
 title: Migration flow — first unlock after upgrade
 type: grilling
-status: closed
+status: out_of_scope
 blocked_by: []
 assigned: dev
 ---
+
+> **OUT OF SCOPE (2026-08-15):** the human dropped the migration entirely — no users yet, the app starts fresh at v3. The design below is retained as history; it will never be exercised.
 
 ## Question
 

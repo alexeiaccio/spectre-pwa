@@ -1,6 +1,5 @@
 import { Context, Effect, Layer, ManagedRuntime, Ref, Schema } from 'effect'
 import {
-  decryptBlob,
   generateDek,
   kekFromPrf,
   unwrapDek,
@@ -8,13 +7,9 @@ import {
   type AesKey,
 } from './crypto-dek.ts'
 import {
-  clearLegacyData,
   getAllRecords,
-  hasLegacyVault,
   readDeviceEnvelope,
-  readEnvelope,
   readMeta,
-  readVaultBlob,
   writeDeviceEnvelope,
   writeMeta,
   writeRecords,
@@ -24,7 +19,6 @@ import { decodeIdentityRecord, encodeIdentityRecord } from '../sync/records.ts'
 import type { SyncRecord } from '../sync/types.ts'
 import type { CryptoError } from './crypto-dek.ts'
 import type { PasskeyError } from './passkey.ts'
-import { VaultSchema } from './schema.ts'
 import type { Envelope, Identity, Vault, WrappedDeK } from './schema.ts'
 
 export type VaultError =
@@ -73,10 +67,6 @@ export interface VaultService {
     records: Map<string, SyncRecord>
     dek: AesKey
   }) => Effect.Effect<{ vault: Vault }, VaultError>
-  /** First unlock after upgrade: convert a v2 blob+envelope to the v3 mirror. */
-  migrate: (
-    method: { kind: 'passkey' } | { kind: 'recovery'; code: string },
-  ) => Effect.Effect<{ vault: Vault }, VaultError>
   /** Drop the in-memory session. */
   lock: () => Effect.Effect<void>
   /** The current unlocked session (null when locked). */
@@ -171,31 +161,6 @@ const unwrapWith = Effect.fn('vault.unwrapWith')(function* (
   )
 })
 
-const decryptVault = Effect.fn('vault.decryptVault')(function* (
-  dek: AesKey,
-): Effect.fn.Return<Vault, VaultError> {
-  const blob = yield* readVaultBlob()
-  if (!blob)
-    return yield* new VaultUnlockedError({
-      message: 'no vault blob — run setup first',
-    })
-  const pt = yield* decryptBlob(
-    dek,
-    new Uint8Array(blob.iv),
-    new Uint8Array(blob.ct),
-  )
-  return yield* Schema.decodeEffect(Schema.fromJsonString(VaultSchema))(
-    new TextDecoder().decode(pt),
-  ).pipe(
-    Effect.mapError(
-      () =>
-        new VaultUnlockedError({
-          message: 'corrupt vault blob — wrong key or tampered data',
-        }),
-    ),
-  )
-})
-
 /**
  * Write every identity of `vault` as a live record under `dek`/`deviceId`,
  * tombstoning any identity present in `prevIds` but absent from `vault`.
@@ -221,8 +186,8 @@ const writeVault = Effect.fn('vault.writeVault')(function* (
 
 /**
  * Load the vault from the mirror: decrypt each live record under the local DEK.
- * (Post-migration / post-join the mirror's records are all under this device's
- * DEK; foreign-writer records from live sync are M8's lazy-decrypt path.)
+ * (Post-join the mirror's records are all under this device's DEK;
+ * foreign-writer records from live sync are M8's lazy-decrypt path.)
  */
 const loadVault = Effect.fn('vault.loadVault')(function* (
   dek: AesKey,
@@ -283,7 +248,7 @@ const makeVaultImpl = (
     VaultError
   > {
     const existing = yield* readMeta()
-    if (existing?.migrated)
+    if (existing?.deviceId)
       return yield* new VaultUnlockedError({
         message: 'vault already exists',
       })
@@ -297,7 +262,7 @@ const makeVaultImpl = (
     )
     const deviceId = crypto.randomUUID()
     yield* writeDeviceEnvelope(deviceId, envelope)
-    yield* writeMeta({ deviceId, migrated: true })
+    yield* writeMeta({ deviceId })
     const vault: Vault = { formatVersion: 1, identities: [] }
     yield* Ref.set(session, { dek, vault })
     const recoveryRecord = envelope.deks.find((d) => d.method === 'recovery')!
@@ -397,39 +362,11 @@ const makeVaultImpl = (
   }): Effect.fn.Return<{ vault: Vault }, VaultError> {
     yield* writeDeviceEnvelope(joined.deviceId, joined.envelope)
     yield* writeRecords(joined.records)
-    yield* writeMeta({ deviceId: joined.deviceId, migrated: true })
+    yield* writeMeta({ deviceId: joined.deviceId })
     // Load the joined identities back from the records (they are under DEK-B).
     const loaded = yield* loadVault(joined.dek)
     yield* Ref.set(session, { dek: joined.dek, vault: loaded })
     return { vault: loaded }
-  }),
-
-  migrate: Effect.fn('VaultService.migrate')(function* (
-    method:
-      | {
-          kind: 'passkey'
-        }
-      | { kind: 'recovery'; code: string },
-  ): Effect.fn.Return<{ vault: Vault }, VaultError> {
-    const envelope = yield* readEnvelope()
-    if (!envelope)
-      return yield* new VaultUnlockedError({ message: 'no legacy envelope' })
-    if (!(yield* hasLegacyVault()))
-      return yield* new VaultUnlockedError({ message: 'no legacy blob' })
-    const dek = yield* unwrapSessionDek(method, envelope)
-    const vault = yield* decryptVault(dek)
-    const deviceId = crypto.randomUUID()
-    yield* writeDeviceEnvelope(deviceId, envelope)
-    const entries: Array<readonly [string, SyncRecord]> = []
-    for (const identity of vault.identities) {
-      const record = yield* encodeIdentityRecord(dek, identity, deviceId)
-      entries.push([identity.id, record])
-    }
-    yield* writeRecords(entries)
-    yield* writeMeta({ deviceId, migrated: true }) // commit point
-    yield* clearLegacyData()
-    yield* Ref.set(session, { dek, vault })
-    return { vault }
   }),
 
   lock: () => Ref.set(session, null),
@@ -460,7 +397,6 @@ export const vaultImpl: VaultService = {
   reEnrollPasskey: (code) => service().reEnrollPasskey(code),
   save: (vault) => service().save(vault),
   joinImport: (joined) => service().joinImport(joined),
-  migrate: (method) => service().migrate(method),
   lock: () => service().lock(),
   session: () => service().session(),
 }

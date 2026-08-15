@@ -2,7 +2,6 @@ import { createSignal } from 'solid-js'
 import { Effect } from 'effect'
 import { vaultImpl } from './service.ts'
 import {
-  hasLegacyVault,
   readDeviceEnvelope,
   readMeta,
   readPrefs,
@@ -11,13 +10,13 @@ import {
 import type { AesKey } from './crypto-dek.ts'
 import type { Envelope, Prefs, Vault, WrappedDeK } from './schema.ts'
 import type { SyncRecord } from '../sync/types.ts'
+import { pushSave } from '../sync/bridge.ts'
 
 const DEFAULT_PREFS: Prefs = { theme: 'dark', autoLockMinutes: 2 }
 
 export type VaultStatus =
   | { kind: 'booting' }
   | { kind: 'needs-setup' }
-  | { kind: 'needs-migration' }
   | { kind: 'locked' }
   | { kind: 'unlocked'; vault: Vault }
   | { kind: 'error'; message: string }
@@ -48,7 +47,7 @@ const requestPersist = (): void => {
 
 /**
  * Owns the vault lifecycle for the UI: boot (detect fresh vs migration vs v3
- * locked), setup, unlock by passkey / recovery code, save, migrate, lock.
+ * locked), setup, unlock by passkey / recovery code, save, lock.
  * The underlying services are Effect services (single runtime); status is a Solid signal.
  */
 export function useVault() {
@@ -68,11 +67,11 @@ export function useVault() {
   const fail = (e: unknown) =>
     setStatus({ kind: 'error', message: messageOf(e) })
 
-  // Boot: v3 vault (migrated) → locked; legacy v1 blob → needs-migration; else fresh.
+  // Boot: a vault exists (meta.deviceId set) → locked; else fresh install.
   const boot = (): void => {
     void runPromise(readMeta())
       .then(async (meta) => {
-        if (meta?.migrated) {
+        if (meta?.deviceId) {
           const envelope = await runPromise(readDeviceEnvelope(meta.deviceId))
           setStatus(
             envelope
@@ -81,10 +80,7 @@ export function useVault() {
           )
           return
         }
-        const legacy = await runPromise(hasLegacyVault())
-        setStatus(
-          legacy ? { kind: 'needs-migration' } : { kind: 'needs-setup' },
-        )
+        setStatus({ kind: 'needs-setup' })
       })
       .catch(fail)
   }
@@ -127,15 +123,6 @@ export function useVault() {
       return vault
     })
 
-  const migrate = (
-    method: { kind: 'passkey' } | { kind: 'recovery'; code: string },
-  ): Promise<Vault | undefined> =>
-    withBusy(async () => {
-      const { vault } = await runPromise(vaultImpl.migrate(method))
-      setStatus({ kind: 'unlocked', vault })
-      return vault
-    })
-
   const reEnrollPasskey = (recoveryCode: string): Promise<Vault | undefined> =>
     withBusy(async () => {
       const { vault } = await runPromise(
@@ -147,8 +134,11 @@ export function useVault() {
 
   const save = (vault: Vault): Promise<boolean> =>
     withBusy(async () => {
+      const s = status()
+      const prev = s.kind === 'unlocked' ? s.vault : null
       await runPromise(vaultImpl.save(vault))
       setStatus({ kind: 'unlocked', vault })
+      void pushSave(prev, vault)
       return true
     }).then((v) => v === true)
 
@@ -193,7 +183,6 @@ export function useVault() {
     setup,
     unlock,
     unlockWithRecovery,
-    migrate,
     reEnrollPasskey,
     save,
     importJoined,

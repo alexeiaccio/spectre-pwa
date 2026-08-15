@@ -7,12 +7,10 @@ import {
   NODE_STORE,
   PREFS_STORE,
   RECORDS_STORE,
-  VAULT_STORE,
   type Envelope,
   type MetaState,
   type NodeIdentity,
   type Prefs,
-  type VaultBlob,
 } from './schema.ts'
 
 export class VaultStorageError extends Schema.TaggedError<VaultStorageError>()(
@@ -25,13 +23,13 @@ const open = (): Effect.Effect<IDBDatabase, VaultStorageError> =>
     const req = indexedDB.open(DB_NAME, 3)
     req.onupgradeneeded = () => {
       const db = req.result
-      for (const store of [ENVELOPE_STORE, VAULT_STORE, PREFS_STORE]) {
-        if (!db.objectStoreNames.contains(store)) {
-          db.createObjectStore(store)
-        }
-      }
-      // v3 stores; the v1 `vault` store is kept until the app-level migration.
-      for (const store of [RECORDS_STORE, NODE_STORE, META_STORE]) {
+      for (const store of [
+        ENVELOPE_STORE,
+        PREFS_STORE,
+        RECORDS_STORE,
+        NODE_STORE,
+        META_STORE,
+      ]) {
         if (!db.objectStoreNames.contains(store)) {
           db.createObjectStore(store)
         }
@@ -93,48 +91,6 @@ function idbTx(
     }),
   )
 }
-
-export const readEnvelope = (): Effect.Effect<
-  Envelope | undefined,
-  VaultStorageError
-> =>
-  idb((db) =>
-    db
-      .transaction(ENVELOPE_STORE, 'readonly')
-      .objectStore(ENVELOPE_STORE)
-      .get('root'),
-  )
-
-export const writeEnvelope = (
-  envelope: Envelope,
-): Effect.Effect<void, VaultStorageError> =>
-  idb((db) =>
-    db
-      .transaction(ENVELOPE_STORE, 'readwrite')
-      .objectStore(ENVELOPE_STORE)
-      .put(envelope, 'root'),
-  ).pipe(Effect.as(undefined))
-
-export const readVaultBlob = (): Effect.Effect<
-  VaultBlob | undefined,
-  VaultStorageError
-> =>
-  idb((db) =>
-    db
-      .transaction(VAULT_STORE, 'readonly')
-      .objectStore(VAULT_STORE)
-      .get('ciphertext'),
-  )
-
-export const writeVaultBlob = (
-  blob: VaultBlob,
-): Effect.Effect<void, VaultStorageError> =>
-  idb((db) =>
-    db
-      .transaction(VAULT_STORE, 'readwrite')
-      .objectStore(VAULT_STORE)
-      .put(blob, 'ciphertext'),
-  ).pipe(Effect.as(undefined))
 
 export const readPrefs = (): Effect.Effect<
   Prefs | undefined,
@@ -271,24 +227,9 @@ export const writeNodeIdentity = (
     tx.objectStore(NODE_STORE).put(node, 'node')
   })
 
-/** True iff the legacy v1 blob is still present (a v2 vault awaiting migration). */
-export const hasLegacyVault = (): Effect.Effect<boolean, VaultStorageError> =>
-  Effect.map(readVaultBlob(), (blob) => blob !== undefined)
-
-/** Clear the v1 data after migration (best-effort cleanup, post-commit). */
-export const clearLegacyData = (): Effect.Effect<void, VaultStorageError> =>
-  idbTx([VAULT_STORE, ENVELOPE_STORE], (tx) => {
-    tx.objectStore(VAULT_STORE).delete('ciphertext')
-    tx.objectStore(ENVELOPE_STORE).delete('root')
-  })
-
 // --- Service layer (Effect v4 function-style key) ---
 
 export interface VaultStorageService {
-  readEnvelope: () => Effect.Effect<Envelope | undefined, VaultStorageError>
-  writeEnvelope: (envelope: Envelope) => Effect.Effect<void, VaultStorageError>
-  readVaultBlob: () => Effect.Effect<VaultBlob | undefined, VaultStorageError>
-  writeVaultBlob: (blob: VaultBlob) => Effect.Effect<void, VaultStorageError>
   readPrefs: () => Effect.Effect<Prefs | undefined, VaultStorageError>
   writePrefs: (prefs: Prefs) => Effect.Effect<void, VaultStorageError>
   readRecord: (
@@ -321,8 +262,6 @@ export interface VaultStorageService {
   writeNodeIdentity: (
     node: NodeIdentity,
   ) => Effect.Effect<void, VaultStorageError>
-  hasLegacyVault: () => Effect.Effect<boolean, VaultStorageError>
-  clearLegacyData: () => Effect.Effect<void, VaultStorageError>
 }
 
 export const VaultStorageService = Context.Service<VaultStorageService>(
@@ -330,10 +269,6 @@ export const VaultStorageService = Context.Service<VaultStorageService>(
 )
 
 export const VaultStorageLive = Layer.succeed(VaultStorageService, {
-  readEnvelope,
-  writeEnvelope,
-  readVaultBlob,
-  writeVaultBlob,
   readPrefs,
   writePrefs,
   readRecord,
@@ -346,6 +281,4 @@ export const VaultStorageLive = Layer.succeed(VaultStorageService, {
   writeMeta,
   readNodeIdentity,
   writeNodeIdentity,
-  hasLegacyVault,
-  clearLegacyData,
 })

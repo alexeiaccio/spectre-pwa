@@ -1,6 +1,6 @@
 import { Effect } from 'effect'
 import { vaultImpl } from '../vault/service.ts'
-import { readEnvelope } from '../vault/storage.ts'
+import { readDeviceEnvelope, readMeta } from '../vault/storage.ts'
 import { encodeIdentityRecord } from './records.ts'
 import {
   ENVELOPE_KEY_PREFIX,
@@ -10,7 +10,7 @@ import {
   encodeRecordDoc,
   type HostPointer,
 } from './types.ts'
-import { SyncUnavailableError } from './adapter.ts'
+import { SyncUnavailableError, persistDoc } from './adapter.ts'
 import type { SyncAdapter } from './adapter.ts'
 
 /**
@@ -22,7 +22,10 @@ import type { SyncAdapter } from './adapter.ts'
 export const shareVaultDoc = async (sync: SyncAdapter): Promise<string> => {
   const session = await Effect.runPromise(vaultImpl.session())
   if (!session) throw new SyncUnavailableError({ message: 'vault locked' })
-  const envelope = await Effect.runPromise(readEnvelope())
+  const meta = await Effect.runPromise(readMeta())
+  if (!meta?.deviceId)
+    throw new SyncUnavailableError({ message: 'vault locked' })
+  const envelope = await Effect.runPromise(readDeviceEnvelope(meta.deviceId))
   if (!envelope)
     throw new SyncUnavailableError({
       message: 'no local envelope — run setup first',
@@ -30,8 +33,9 @@ export const shareVaultDoc = async (sync: SyncAdapter): Promise<string> => {
   if (session.vault.identities.length === 0)
     throw new SyncUnavailableError({ message: 'no identities to share yet' })
 
-  const deviceId = crypto.randomUUID()
+  const deviceId = meta.deviceId
   const doc = await sync.createDoc()
+  await persistDoc(doc.ticket, doc.docId)
   const host: HostPointer = {
     deviceId,
     identityIds: session.vault.identities.map((i) => i.id),

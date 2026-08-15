@@ -15,8 +15,8 @@ import {
   useParams,
 } from '@solidjs/router'
 import { deriveScreen } from '../../lib/navigation/screen.ts'
-import type { SessionStatus } from '../../lib/spectre/useIdentitySession.ts'
-import type { VaultStatus } from '../../lib/vault/useVault.ts'
+import type { SessionStatus } from '../../lib/spectre/use-identity-session.ts'
+import type { VaultStatus } from '../../lib/vault/use-vault.ts'
 
 interface StatusSource {
   vaultStatus: () => VaultStatus

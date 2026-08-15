@@ -1,11 +1,10 @@
-import type { SessionStatus } from '../spectre/useIdentitySession.ts'
-import type { VaultStatus } from '../vault/useVault.ts'
+import type { SessionStatus } from '../spectre/use-identity-session.ts'
+import type { VaultStatus } from '../vault/use-vault.ts'
 
 export type Screen =
   | { view: 'booting' }
   | { view: 'setup' }
   | { view: 'locked' }
-  | { view: 'migrating' }
   | { view: 'error'; message: string }
   | { view: 'identities' }
   | { view: 'identity'; id: string; status: SessionStatus }
@@ -52,9 +51,6 @@ export const deriveScreen = (
       return { screen: { view: 'booting' }, redirect: noRedirect }
     case 'needs-setup':
       return guardTo({ view: 'setup' }, '/setup', url)
-    case 'needs-migration':
-      // Transient, like booting — no URL of its own, never redirected.
-      return { screen: { view: 'migrating' }, redirect: noRedirect }
     case 'locked':
       return guardTo({ view: 'locked' }, '/locked', url)
     case 'error':

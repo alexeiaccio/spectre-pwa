@@ -4,7 +4,6 @@ export const DB_NAME = 'spectre-pocket'
 export const DB_VERSION = 3
 
 export const ENVELOPE_STORE = 'envelope'
-export const VAULT_STORE = 'vault'
 export const PREFS_STORE = 'prefs'
 export const RECORDS_STORE = 'records'
 export const NODE_STORE = 'node'
@@ -92,34 +91,28 @@ export interface Envelope {
   deks: WrappedDeK[]
 }
 
-/** The single encrypted blob in the vault store, key "ciphertext". */
-export interface VaultBlob {
-  iv: ArrayBuffer
-  ct: ArrayBuffer
-}
-
 /** The mirror's node identity (S6/M3): iroh SecretKey + the persisted vault doc. */
 export interface NodeIdentity {
   secretKey: string
   docTicket?: string
+  docId?: string
   authorKey?: string
 }
 
 export const NodeIdentitySchema = Schema.Struct({
   secretKey: Schema.String,
   docTicket: Schema.optional(Schema.String),
+  docId: Schema.optional(Schema.String),
   authorKey: Schema.optional(Schema.String),
 })
 
-/** The mirror's meta state (M3): which device is "this device" + migration flag. */
+/** The mirror's meta state (M3): which device is "this device". */
 export interface MetaState {
   deviceId: string
-  migrated: boolean
 }
 
 export const MetaStateSchema = Schema.Struct({
   deviceId: Schema.String,
-  migrated: Schema.Boolean,
 })
 
 export interface Prefs {

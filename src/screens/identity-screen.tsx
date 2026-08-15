@@ -15,11 +15,11 @@ import {
   Input,
   Text,
 } from '../components/ui/index.ts'
-import { PURPOSE_LABEL, NEW_SITE_DRAFT, SiteFields } from './SiteFields.tsx'
-import type { SiteFormState } from './SiteFields.tsx'
+import { PURPOSE_LABEL, NEW_SITE_DRAFT, SiteFields } from './site-fields.tsx'
+import type { SiteFormState } from './site-fields.tsx'
 import { copyWithAutoClear } from '../lib/lifecycle.ts'
 import type { Identity, Site } from '../lib/vault/schema.ts'
-import type { SessionStatus } from '../lib/spectre/useIdentitySession.ts'
+import type { SessionStatus } from '../lib/spectre/use-identity-session.ts'
 
 export default function IdentityScreen(props: {
   identity: Identity

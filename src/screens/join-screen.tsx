@@ -27,10 +27,11 @@ import {
   type DeviceEnvelope,
   type SyncRecord,
 } from '../lib/sync/types.ts'
+import { persistDoc } from '../lib/sync/adapter.ts'
 import { createPasskeyWithPrf } from '../lib/vault/passkey.ts'
 import type { AesKey } from '../lib/vault/crypto-dek.ts'
 import type { Envelope, Vault } from '../lib/vault/schema.ts'
-import type { VaultStatus } from '../lib/vault/useVault.ts'
+import type { VaultStatus } from '../lib/vault/use-vault.ts'
 
 type JoinStep = 'invite' | 'syncing' | 'recovery' | 'enrolling'
 
@@ -87,6 +88,7 @@ export default function JoinScreen(props: {
       sync = adapter
       await adapter.start()
       const joined = await adapter.joinDoc(ticket().trim())
+      await persistDoc(ticket().trim(), joined.docId)
       docId = joined.docId
       // Experimental sync may deliver slowly (or not at all) — poll with a
       // generous window and surface the state rather than hard-failing.

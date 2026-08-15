@@ -1,7 +1,7 @@
 import { render } from '@solidjs/web'
 import { registerSW } from 'virtual:pwa-register'
 import './index.css'
-import App from './App.tsx'
+import App from './app.tsx'
 
 const root = document.getElementById('root')
 
