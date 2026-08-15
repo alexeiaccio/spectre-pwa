@@ -1,22 +1,5 @@
 import { Show } from 'solid-js'
-import {
-  Content as SelectContent,
-  Item as SelectItem,
-  ItemLabel as SelectItemLabel,
-  Listbox as SelectListbox,
-  Portal as SelectPortal,
-  Root as SelectRoot,
-  Trigger as SelectTrigger,
-  Value as SelectValue,
-} from '@kobalte/core/select'
-import {
-  Input as NumberFieldInput,
-  Root as NumberFieldRoot,
-} from '@kobalte/core/number-field'
-import {
-  Input as TextFieldInput,
-  Root as TextFieldRoot,
-} from '@kobalte/core/text-field'
+import { Input, NumberField, Select } from '../components/ui/index.ts'
 import type { Site } from '../lib/vault/schema.ts'
 
 export const PURPOSE_LABEL: Record<Site['purpose'], string> = {
@@ -46,43 +29,6 @@ const TEMPLATE_OPTIONS: { value: number; label: string }[] = Object.entries(
   TEMPLATES,
 ).map(([label, id]) => ({ value: id, label }))
 
-/** Compact B/W-styled single Kobalte Select for the site form row. */
-function MiniSelect<
-  T extends { value: number | string; label: string },
->(props: { options: T[]; value: T; onChange: (opt: T) => void }) {
-  return (
-    <SelectRoot<T>
-      options={props.options}
-      optionValue="value"
-      optionTextValue="label"
-      value={props.value}
-      onChange={(opt) => {
-        if (opt) props.onChange(opt)
-      }}
-      itemComponent={(p) => (
-        <SelectItem
-          item={p.item}
-          class="flex tap items-center justify-between gap-2 px-3 py-2 text-sm text-slate-100 data-[highlighted]:bg-white data-[highlighted]:text-black"
-        >
-          <SelectItemLabel>{p.item.rawValue.label}</SelectItemLabel>
-        </SelectItem>
-      )}
-    >
-      <SelectTrigger class="flex tap w-full min-w-0 items-center justify-between gap-2 rounded border border-surface-700 bg-surface-800 px-2 py-1 text-sm text-slate-100">
-        <SelectValue<T>>
-          {(state) => state.selectedOption()?.label ?? '…'}
-        </SelectValue>
-        <span class="shrink-0 text-xs text-slate-500">▾</span>
-      </SelectTrigger>
-      <SelectPortal>
-        <SelectContent class="z-10 min-w-[10rem] overflow-hidden rounded border border-surface-700 bg-surface-800 p-1 shadow-lg">
-          <SelectListbox />
-        </SelectContent>
-      </SelectPortal>
-    </SelectRoot>
-  )
-}
-
 export interface SiteFormState {
   name: string
   purpose: Site['purpose']
@@ -107,22 +53,19 @@ export function SiteFields(props: {
 }) {
   return (
     <>
-      <TextFieldRoot>
-        <TextFieldInput
-          class="tap w-full rounded border border-surface-700 bg-surface-800 px-2 py-1 text-sm text-slate-100"
-          value={props.draft.name}
-          onInput={(e) =>
-            props.setDraft((d) => ({
-              ...d,
-              name: (e.target as HTMLInputElement).value,
-            }))
-          }
-          placeholder={props.namePlaceholder}
-        />
-      </TextFieldRoot>
+      <Input
+        value={props.draft.name}
+        onInput={(e) =>
+          props.setDraft((d) => ({
+            ...d,
+            name: (e.target as HTMLInputElement).value,
+          }))
+        }
+        placeholder={props.namePlaceholder}
+      />
       <div class="flex items-stretch gap-2">
         <div class="min-w-0 flex-1">
-          <MiniSelect
+          <Select
             options={PURPOSE_OPTIONS}
             value={
               PURPOSE_OPTIONS.find((o) => o.value === props.draft.purpose) ??
@@ -137,7 +80,7 @@ export function SiteFields(props: {
           />
         </div>
         <div class="min-w-0 flex-1">
-          <MiniSelect
+          <Select
             options={TEMPLATE_OPTIONS}
             value={
               TEMPLATE_OPTIONS.find((o) => o.value === props.draft.template) ??
@@ -148,36 +91,29 @@ export function SiteFields(props: {
             }
           />
         </div>
-        <NumberFieldRoot
+        <NumberField
           value={props.draft.counter}
           minValue={1}
+          title="Spectre counter"
           onChange={(v) =>
             props.setDraft((d) => ({
               ...d,
-              counter: Math.max(1, Number(v)),
+              counter: Math.max(1, v),
             }))
           }
-        >
-          <NumberFieldInput
-            class="tap w-16 rounded border border-surface-700 bg-surface-800 px-2 py-1 text-sm text-slate-100"
-            title="Spectre counter"
-          />
-        </NumberFieldRoot>
+        />
       </div>
       <Show when={props.draft.purpose === 'answer'}>
-        <TextFieldRoot>
-          <TextFieldInput
-            class="tap w-full rounded border border-surface-700 bg-surface-800 px-2 py-1 text-sm text-slate-100"
-            value={props.draft.answer}
-            onInput={(e) =>
-              props.setDraft((d) => ({
-                ...d,
-                answer: (e.target as HTMLInputElement).value,
-              }))
-            }
-            placeholder="security question, e.g. childhood pet"
-          />
-        </TextFieldRoot>
+        <Input
+          value={props.draft.answer}
+          onInput={(e) =>
+            props.setDraft((d) => ({
+              ...d,
+              answer: (e.target as HTMLInputElement).value,
+            }))
+          }
+          placeholder="security question, e.g. childhood pet"
+        />
       </Show>
     </>
   )

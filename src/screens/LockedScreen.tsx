@@ -1,8 +1,5 @@
 import { createSignal, Show } from 'solid-js'
-import {
-  Input as TextFieldInput,
-  Root as TextFieldRoot,
-} from '@kobalte/core/text-field'
+import { Button, Hint, Input, Text } from '../components/ui/index.ts'
 
 export default function LockedScreen(props: {
   onPasskey: () => void
@@ -13,28 +10,19 @@ export default function LockedScreen(props: {
   const [reEnrollOpen, setReEnrollOpen] = createSignal(false)
   return (
     <div data-screen="locked" class="flex flex-col gap-4">
-      <button
-        class="tap rounded bg-teal-spectre px-3 py-2 text-sm font-medium text-black"
-        onClick={() => props.onPasskey()}
-      >
+      <Button variant="primary" onClick={() => props.onPasskey()}>
         Unlock with passkey
-      </button>
-      <p class="text-sm text-slate-400">…or with your recovery code:</p>
+      </Button>
+      <Text>…or with your recovery code:</Text>
       <div class="flex flex-col gap-2">
-        <TextFieldRoot>
-          <TextFieldInput
-            class="tap w-full rounded border border-surface-700 bg-surface-800 px-2 py-1 text-sm text-slate-100"
-            value={code()}
-            onInput={(e) => setCode((e.target as HTMLInputElement).value)}
-            placeholder="recovery code"
-          />
-        </TextFieldRoot>
-        <button
-          class="tap rounded border border-surface-700 px-2 py-1 text-sm text-slate-300"
-          onClick={() => props.onRecovery(code())}
-        >
+        <Input
+          value={code()}
+          onInput={(e) => setCode((e.target as HTMLInputElement).value)}
+          placeholder="recovery code"
+        />
+        <Button variant="secondary" onClick={() => props.onRecovery(code())}>
           Unlock with code
-        </button>
+        </Button>
         <button
           class="text-xs text-slate-500 underline hover:text-slate-300"
           onClick={() => setReEnrollOpen((v) => !v)}
@@ -42,10 +30,10 @@ export default function LockedScreen(props: {
           Replace lost passkey…
         </button>
         <Show when={reEnrollOpen()}>
-          <p class="text-xs text-slate-500">
+          <Hint>
             Unlock first (above), then confirm your recovery code here to enroll
             a new passkey.
-          </p>
+          </Hint>
         </Show>
         <button
           class="text-xs text-slate-500 underline hover:text-slate-300"

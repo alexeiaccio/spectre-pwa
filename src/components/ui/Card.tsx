@@ -1,5 +1,4 @@
-import { splitProps } from 'solid-js'
-import type { ComponentProps, ParentComponent } from 'solid-js'
+import type { JSX } from '@solidjs/web'
 
 type CardVariant = 'solid' | 'dashed'
 
@@ -9,14 +8,14 @@ const VARIANT_CLASS: Record<CardVariant, string> = {
 }
 
 /** B/W-themed container. `solid` = filled panel; `dashed` = form section. */
-export const Card: ParentComponent<
-  ComponentProps<'div'> & { variant?: CardVariant }
-> = (props) => {
-  const [local, rest] = splitProps(props, ['variant', 'class'])
+export function Card(props: {
+  variant?: CardVariant
+  class?: string
+  children?: JSX.Element
+}) {
   return (
-    <div
-      {...rest}
-      class={`${VARIANT_CLASS[local.variant ?? 'dashed']} ${local.class ?? ''}`}
-    />
+    <div class={`${VARIANT_CLASS[props.variant ?? 'dashed']} ${props.class ?? ''}`}>
+      {props.children}
+    </div>
   )
 }

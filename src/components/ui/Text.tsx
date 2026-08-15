@@ -1,32 +1,21 @@
-import { splitProps } from 'solid-js'
-import type { ComponentProps, ParentComponent } from 'solid-js'
+import type { JSX } from '@solidjs/web'
 
 /** Muted description text (`text-sm text-slate-400`). */
-export const Text: ParentComponent<ComponentProps<'p'>> = (props) => {
-  const [local, rest] = splitProps(props, ['class'])
-  return (
-    <p {...rest} class={`text-sm text-slate-400 ${local.class ?? ''}`} />
-  )
+export function Text(props: { class?: string; children?: JSX.Element }) {
+  return <p class={`text-sm text-slate-400 ${props.class ?? ''}`}>{props.children}</p>
 }
 
 /** Small muted hint (`text-xs text-slate-500`). */
-export const Hint: ParentComponent<ComponentProps<'p'>> = (props) => {
-  const [local, rest] = splitProps(props, ['class'])
-  return (
-    <p {...rest} class={`text-xs text-slate-500 ${local.class ?? ''}`} />
-  )
+export function Hint(props: { class?: string; children?: JSX.Element }) {
+  return <p class={`text-xs text-slate-500 ${props.class ?? ''}`}>{props.children}</p>
 }
 
 /** Error text (`text-sm text-red-400`). */
-export const ErrorText: ParentComponent<ComponentProps<'p'>> = (props) => {
-  const [local, rest] = splitProps(props, ['class'])
-  return <p {...rest} class={`text-sm text-red-400 ${local.class ?? ''}`} />
+export function ErrorText(props: { class?: string; children?: JSX.Element }) {
+  return <p class={`text-sm text-red-400 ${props.class ?? ''}`}>{props.children}</p>
 }
 
 /** Accent/pending text (`text-sm text-teal-spectre`). */
-export const Accent: ParentComponent<ComponentProps<'p'>> = (props) => {
-  const [local, rest] = splitProps(props, ['class'])
-  return (
-    <p {...rest} class={`text-sm text-teal-spectre ${local.class ?? ''}`} />
-  )
+export function Accent(props: { class?: string; children?: JSX.Element }) {
+  return <p class={`text-sm text-teal-spectre ${props.class ?? ''}`}>{props.children}</p>
 }
