@@ -14,6 +14,7 @@ export function Button(props: {
   variant?: ButtonVariant
   class?: string
   disabled?: boolean
+  type?: 'button' | 'submit'
   onClick?: JSX.EventHandlerUnion<HTMLButtonElement, MouseEvent>
   children?: JSX.Element
 }) {
@@ -21,7 +22,7 @@ export function Button(props: {
     `${VARIANT_CLASS[props.variant ?? 'primary']} disabled:opacity-40 ${props.class ?? ''}`
   return (
     <button
-      type="button"
+      type={props.type ?? 'button'}
       class={cls()}
       disabled={props.disabled}
       onClick={props.onClick}

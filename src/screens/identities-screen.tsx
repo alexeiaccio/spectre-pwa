@@ -46,7 +46,8 @@ export default function IdentitiesScreen() {
               </button>
               <button
                 class="tap rounded border border-surface-700 bg-surface-800 px-2 text-sm text-slate-500 hover:border-red-900 hover:text-red-400"
-                title="Delete identity"
+                type="button"
+                aria-label={`Delete identity ${identity.fullName}`}
                 onClick={() => void onDeleteIdentity(identity)}
               >
                 ✕

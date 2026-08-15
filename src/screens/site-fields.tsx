@@ -104,6 +104,7 @@ export function SiteFields(props: {
   return (
     <>
       <Input
+        label="Site name"
         value={props.draft.name}
         onInput={(e) =>
           props.setDraft((d) => ({
@@ -118,6 +119,7 @@ export function SiteFields(props: {
       </Show>
       <Show when={props.draft.purpose === 'answer'}>
         <Input
+          label="Security question answer"
           value={props.draft.answer}
           onInput={(e) =>
             props.setDraft((d) => ({

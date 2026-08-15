@@ -220,16 +220,24 @@ export default function IdentityScreen() {
 
   const addSiteBlock = () => (
     <Card variant="dashed">
-      <Hint>Add a site (derives on demand, no stored secrets):</Hint>
-      <SiteFields
-        draft={newSite()}
-        setDraft={setNewSite}
-        namePlaceholder="site name, e.g. twitter.com"
-        collapsible
-      />
-      <Button variant="primary" onClick={() => void onAddSite()}>
-        Add site
-      </Button>
+      <form
+        class="flex flex-col gap-2"
+        onSubmit={(e) => {
+          e.preventDefault()
+          void onAddSite()
+        }}
+      >
+        <Hint>Add a site (derives on demand, no stored secrets):</Hint>
+        <SiteFields
+          draft={newSite()}
+          setDraft={setNewSite}
+          namePlaceholder="site name, e.g. twitter.com"
+          collapsible
+        />
+        <Button variant="primary" type="submit">
+          Add site
+        </Button>
+      </form>
     </Card>
   )
 
@@ -253,7 +261,13 @@ export default function IdentityScreen() {
         when={effective().kind === 'idle' || effective().kind === 'error'}
         fallback={null}
       >
-        <div class="flex flex-col gap-2">
+        <form
+          class="flex flex-col gap-2"
+          onSubmit={(e) => {
+            e.preventDefault()
+            void onUnlockIdentity()
+          }}
+        >
           {errorMsg()}
           <Text>
             This identity is passphrase-locked. The secret is derived once per
@@ -263,18 +277,20 @@ export default function IdentityScreen() {
             <Identicon value={identicon} size="lg" />
             <Input
               class="flex-1"
+              label="Spectre passphrase"
               value={passphrase()}
               onInput={(e) =>
                 setPassphrase((e.target as HTMLInputElement).value)
               }
               placeholder="Spectre passphrase"
               type="password"
+              autocomplete="current-password"
             />
           </div>
-          <Button variant="primary" onClick={() => void onUnlockIdentity()}>
+          <Button variant="primary" type="submit">
             Unlock identity
           </Button>
-        </div>
+        </form>
       </Show>
 
       <Show
@@ -317,6 +333,7 @@ export default function IdentityScreen() {
                     {(r) => (
                       <button
                         class="flex min-h-11 w-full items-center justify-between gap-2 border-t border-surface-700 px-3 py-2 text-left"
+                        aria-label={`Copy ${site.name} value`}
                         onClick={() => onCopy(r().site.id, r().value)}
                       >
                         <span class="font-mono text-sm break-all text-teal-spectre">
@@ -331,30 +348,38 @@ export default function IdentityScreen() {
                     )}
                   </Show>
                   <Show when={editingId() === site.id}>
-                    <div class="flex flex-col gap-2 border-t border-surface-700 p-3">
+                    <form
+                      class="flex flex-col gap-2 border-t border-surface-700 p-3"
+                      onSubmit={(e) => {
+                        e.preventDefault()
+                        void onUpdateSite(site)
+                      }}
+                    >
                       <SiteFields
                         draft={editDraft()}
                         setDraft={setEditDraft}
                         namePlaceholder="site name"
                       />
                       <div class="flex gap-2">
-                        <Button
-                          variant="primary"
-                          onClick={() => void onUpdateSite(site)}
-                        >
+                        <Button variant="primary" type="submit">
                           Save
                         </Button>
-                        <Button variant="secondary" onClick={onCancelEdit}>
+                        <Button
+                          variant="secondary"
+                          type="button"
+                          onClick={onCancelEdit}
+                        >
                           Cancel
                         </Button>
                         <button
                           class="ml-auto tap rounded border border-red-900 px-3 py-1 text-xs text-red-400 hover:text-red-300"
+                          type="button"
                           onClick={() => void onDeleteSite(site)}
                         >
                           Delete site
                         </button>
                       </div>
-                    </div>
+                    </form>
                   </Show>
                   <Show when={editingId() !== site.id}>
                     <button

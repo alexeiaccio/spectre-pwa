@@ -12,35 +12,45 @@ export default function SetupScreen() {
       <Text>
         First run — create your vault. Add a recovery code as your key in:
       </Text>
-      <Input
-        value={code()}
-        onInput={(e) => setCode((e.target as HTMLInputElement).value)}
-        placeholder="recovery code"
-      />
-      <Button
-        variant="primary"
-        disabled={noCode()}
-        onClick={() => void api.vault.setup(code())}
+      <form
+        class="flex flex-col gap-4"
+        onSubmit={(e) => {
+          e.preventDefault()
+          if (!noCode()) void api.vault.setup(code())
+        }}
       >
-        Create vault with passkey
-      </Button>
-      <Show when={noCode()}>
-        <Hint>Enter a recovery code first — it's the key to your vault.</Hint>
-      </Show>
-      <div class="flex flex-col gap-1">
+        <Input
+          label="Recovery code"
+          value={code()}
+          onInput={(e) => setCode((e.target as HTMLInputElement).value)}
+          placeholder="recovery code"
+          autocomplete="new-password"
+        />
         <Button
-          variant="secondary"
+          variant="primary"
+          type="submit"
           disabled={noCode()}
-          onClick={() => void api.vault.setupRecoveryOnly(code())}
         >
-          Create vault without a passkey
+          Create vault with passkey
         </Button>
-        <Hint>
-          Use this in an installed PWA where Chrome can't create a platform
-          passkey. You'll unlock with the recovery code; a passkey can be added
-          later from a browser tab.
-        </Hint>
-      </div>
+        <Show when={noCode()}>
+          <Hint>Enter a recovery code first — it's the key to your vault.</Hint>
+        </Show>
+        <div class="flex flex-col gap-1">
+          <Button
+            variant="secondary"
+            disabled={noCode()}
+            onClick={() => void api.vault.setupRecoveryOnly(code())}
+          >
+            Create vault without a passkey
+          </Button>
+          <Hint>
+            Use this in an installed PWA where Chrome can't create a platform
+            passkey. You'll unlock with the recovery code; a passkey can be
+            added later from a browser tab.
+          </Hint>
+        </div>
+      </form>
       <button
         class="text-xs text-slate-500 underline hover:text-slate-300"
         onClick={() => navigate('/join')}

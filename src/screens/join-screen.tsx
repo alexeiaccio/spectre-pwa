@@ -314,50 +314,72 @@ export default function JoinScreen() {
       </Show>
 
       <Show when={step() === 'unlock'}>
-        <Text>
-          Unlock this device first (its identities will merge into the joined
-          vault):
-        </Text>
-        <Button
-          variant="primary"
-          onClick={() => void unlockLocal({ kind: 'passkey' })}
-        >
-          Unlock with passkey
-        </Button>
-        <Input
-          value={localCode()}
-          onInput={(e) => setLocalCode((e.target as HTMLInputElement).value)}
-          placeholder="recovery code"
-          type="password"
-        />
-        <Button
-          variant="secondary"
-          disabled={localCode().length < 8}
-          onClick={() =>
+        <form
+          class="flex flex-col gap-2"
+          onSubmit={(e) => {
+            e.preventDefault()
             void unlockLocal({ kind: 'recovery', code: localCode() })
-          }
+          }}
         >
-          Unlock with code
-        </Button>
+          <Text>
+            Unlock this device first (its identities will merge into the joined
+            vault):
+          </Text>
+          <Button
+            variant="primary"
+            type="button"
+            onClick={() => void unlockLocal({ kind: 'passkey' })}
+          >
+            Unlock with passkey
+          </Button>
+          <Input
+            label="Recovery code"
+            value={localCode()}
+            onInput={(e) =>
+              setLocalCode((e.target as HTMLInputElement).value)
+            }
+            placeholder="recovery code"
+            type="password"
+            autocomplete="current-password"
+          />
+          <Button
+            variant="secondary"
+            type="submit"
+            disabled={localCode().length < 8}
+          >
+            Unlock with code
+          </Button>
+        </form>
       </Show>
 
       <Show when={step() === 'invite'}>
-        <Text>
-          Paste the invitation from your other device (created under “Sync with
-          another device”):
-        </Text>
-        <Textarea
-          value={ticket()}
-          onInput={(e) => setTicket((e.target as HTMLTextAreaElement).value)}
-          placeholder="invitation string"
-        />
-        <Button
-          variant="primary"
-          disabled={!ticket().trim()}
-          onClick={() => void startJoin()}
+        <form
+          class="flex flex-col gap-2"
+          onSubmit={(e) => {
+            e.preventDefault()
+            void startJoin()
+          }}
         >
-          Join
-        </Button>
+          <Text>
+            Paste the invitation from your other device (created under “Sync
+            with another device”):
+          </Text>
+          <Textarea
+            label="Invitation string"
+            value={ticket()}
+            onInput={(e) =>
+              setTicket((e.target as HTMLTextAreaElement).value)
+            }
+            placeholder="invitation string"
+          />
+          <Button
+            variant="primary"
+            type="submit"
+            disabled={!ticket().trim()}
+          >
+            Join
+          </Button>
+        </form>
       </Show>
 
       <Show when={step() === 'syncing'}>
@@ -370,23 +392,33 @@ export default function JoinScreen() {
       </Show>
 
       <Show when={step() === 'recovery'}>
-        <Text>
-          Enter the recovery code from the other device (verified against the
-          host's envelope):
-        </Text>
-        <Input
-          value={code()}
-          onInput={(e) => setCode((e.target as HTMLInputElement).value)}
-          placeholder="recovery code"
-          type="password"
-        />
-        <Button
-          variant="primary"
-          disabled={code().length < 8}
-          onClick={() => void submitCode()}
+        <form
+          class="flex flex-col gap-2"
+          onSubmit={(e) => {
+            e.preventDefault()
+            void submitCode()
+          }}
         >
-          Unlock &amp; join
-        </Button>
+          <Text>
+            Enter the recovery code from the other device (verified against the
+            host's envelope):
+          </Text>
+          <Input
+            label="Recovery code"
+            value={code()}
+            onInput={(e) => setCode((e.target as HTMLInputElement).value)}
+            placeholder="recovery code"
+            type="password"
+            autocomplete="current-password"
+          />
+          <Button
+            variant="primary"
+            type="submit"
+            disabled={code().length < 8}
+          >
+            Unlock &amp; join
+          </Button>
+        </form>
       </Show>
 
       <Show when={step() === 'enrolling'}>

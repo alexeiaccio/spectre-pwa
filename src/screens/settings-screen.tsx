@@ -100,61 +100,85 @@ export default function SettingsScreen() {
         </button>
       </div>
       <Card variant="dashed">
-        <Hint>Add an identity (passphrase is your Spectre secret):</Hint>
-        <div class="flex items-center gap-3">
-          <Identicon value={identicon} size="lg" />
-          <div class="flex flex-1 flex-col gap-2">
-            <Input
-              value={newIdentity().fullName}
-              onInput={(e) =>
-                setNewIdentity((n) => ({
-                  ...n,
-                  fullName: (e.target as HTMLInputElement).value,
-                }))
-              }
-              placeholder="full name"
-            />
-            <Input
-              value={newIdentity().passphrase}
-              onInput={(e) =>
-                setNewIdentity((n) => ({
-                  ...n,
-                  passphrase: (e.target as HTMLInputElement).value,
-                }))
-              }
-              placeholder="passphrase (min 8)"
-              type="password"
-            />
-          </div>
-        </div>
-        <Button
-          variant="primary"
-          disabled={newIdentity().passphrase.length < 8}
-          onClick={() => void onSaveIdentity()}
-        >
-          Add identity
-        </Button>
-      </Card>
-      <Card variant="dashed">
-        <Hint>
-          Lost your passkey? Re-enroll a new one (rotates the vault key):
-        </Hint>
-        <Input
-          value={reEnrollCode()}
-          onInput={(e) => setReEnrollCode((e.target as HTMLInputElement).value)}
-          placeholder="recovery code"
-        />
-        <Button
-          variant="primary"
-          disabled={reEnrollCode().length < 8}
-          onClick={() => {
-            void api.vault.reEnrollPasskey(reEnrollCode()).then((v) => {
-              if (v) setReEnrollCode('')
-            })
+        <form
+          class="flex flex-col gap-2"
+          onSubmit={(e) => {
+            e.preventDefault()
+            void onSaveIdentity()
           }}
         >
-          Replace passkey
-        </Button>
+          <Hint>Add an identity (passphrase is your Spectre secret):</Hint>
+          <div class="flex items-center gap-3">
+            <Identicon value={identicon} size="lg" />
+            <div class="flex flex-1 flex-col gap-2">
+              <Input
+                label="Full name"
+                value={newIdentity().fullName}
+                onInput={(e) =>
+                  setNewIdentity((n) => ({
+                    ...n,
+                    fullName: (e.target as HTMLInputElement).value,
+                  }))
+                }
+                placeholder="full name"
+                autocomplete="name"
+              />
+              <Input
+                label="Passphrase"
+                value={newIdentity().passphrase}
+                onInput={(e) =>
+                  setNewIdentity((n) => ({
+                    ...n,
+                    passphrase: (e.target as HTMLInputElement).value,
+                  }))
+                }
+                placeholder="passphrase (min 8)"
+                type="password"
+                autocomplete="new-password"
+              />
+            </div>
+          </div>
+          <Button
+            variant="primary"
+            type="submit"
+            disabled={newIdentity().passphrase.length < 8}
+          >
+            Add identity
+          </Button>
+        </form>
+      </Card>
+      <Card variant="dashed">
+        <form
+          class="flex flex-col gap-2"
+          onSubmit={(e) => {
+            e.preventDefault()
+            void api.vault
+              .reEnrollPasskey(reEnrollCode())
+              .then((v) => {
+                if (v) setReEnrollCode('')
+              })
+          }}
+        >
+          <Hint>
+            Lost your passkey? Re-enroll a new one (rotates the vault key):
+          </Hint>
+          <Input
+            label="Recovery code"
+            value={reEnrollCode()}
+            onInput={(e) =>
+              setReEnrollCode((e.target as HTMLInputElement).value)
+            }
+            placeholder="recovery code"
+            autocomplete="current-password"
+          />
+          <Button
+            variant="primary"
+            type="submit"
+            disabled={reEnrollCode().length < 8}
+          >
+            Replace passkey
+          </Button>
+        </form>
       </Card>
       <Card variant="dashed">
         <Hint>Auto-lock after hiding the app:</Hint>
