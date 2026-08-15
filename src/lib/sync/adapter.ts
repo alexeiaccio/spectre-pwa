@@ -19,12 +19,12 @@ export class SyncUnavailableError extends Schema.TaggedError<SyncUnavailableErro
   { message: Schema.String },
 ) {}
 
-export interface SyncDocHandle {
+interface SyncDocHandle {
   docId: string
   ticket: string
 }
 
-export interface SyncSubscribeHandlers {
+interface SyncSubscribeHandlers {
   onValue: (key: string, value: string) => void
   onStatus: (status: string) => void
 }
@@ -43,7 +43,7 @@ export interface SyncAdapter {
   syncStatus(docId: string): Promise<string>
 }
 
-export function createWasmSyncAdapter(): SyncAdapter {
+function createWasmSyncAdapter(): SyncAdapter {
   let node: SyncNode | null = null
 
   const ensure = async (): Promise<SyncNode> => {

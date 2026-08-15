@@ -1,4 +1,4 @@
-import type { Identity, Site, Vault } from './schema.ts'
+import type { Site, Vault } from './schema.ts'
 
 /** Append a site to an identity, returning a new Vault (no-op if the identity is missing). */
 export const addSite = (
@@ -45,9 +45,3 @@ export const deleteIdentity = (vault: Vault, identityId: string): Vault => ({
   ...vault,
   identities: vault.identities.filter((i) => i.id !== identityId),
 })
-
-/** Empty-identity shorthand for callers that build a new identity. */
-export const identityWithSites = (
-  identity: Identity,
-  sites: Site[],
-): Identity => ({ ...identity, sites })

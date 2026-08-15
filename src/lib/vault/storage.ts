@@ -1,4 +1,4 @@
-import { Context, Effect, Layer, Schema } from 'effect'
+import { Effect, Schema } from 'effect'
 import type { SyncRecord } from '../sync/types.ts'
 import {
   DB_NAME,
@@ -13,7 +13,7 @@ import {
   type Prefs,
 } from './schema.ts'
 
-export class VaultStorageError extends Schema.TaggedError<VaultStorageError>()(
+class VaultStorageError extends Schema.TaggedError<VaultStorageError>()(
   'VaultStorageError',
   { message: Schema.String },
 ) {}
@@ -114,16 +114,6 @@ export const writePrefs = (
   ).pipe(Effect.as(undefined))
 
 // --- v3 mirror helpers ---
-
-export const readRecord = (
-  identityId: string,
-): Effect.Effect<SyncRecord | undefined, VaultStorageError> =>
-  idb((db) =>
-    db
-      .transaction(RECORDS_STORE, 'readonly')
-      .objectStore(RECORDS_STORE)
-      .get(identityId),
-  )
 
 export const writeRecord = (
   identityId: string,
@@ -226,59 +216,3 @@ export const writeNodeIdentity = (
   idbTx([NODE_STORE], (tx) => {
     tx.objectStore(NODE_STORE).put(node, 'node')
   })
-
-// --- Service layer (Effect v4 function-style key) ---
-
-export interface VaultStorageService {
-  readPrefs: () => Effect.Effect<Prefs | undefined, VaultStorageError>
-  writePrefs: (prefs: Prefs) => Effect.Effect<void, VaultStorageError>
-  readRecord: (
-    id: string,
-  ) => Effect.Effect<SyncRecord | undefined, VaultStorageError>
-  writeRecord: (
-    id: string,
-    record: SyncRecord,
-  ) => Effect.Effect<void, VaultStorageError>
-  writeRecords: (
-    entries: Iterable<readonly [string, SyncRecord]>,
-  ) => Effect.Effect<void, VaultStorageError>
-  getAllRecords: () => Effect.Effect<
-    Array<readonly [string, SyncRecord]>,
-    VaultStorageError
-  >
-  readDeviceEnvelope: (
-    deviceId: string,
-  ) => Effect.Effect<Envelope | undefined, VaultStorageError>
-  writeDeviceEnvelope: (
-    deviceId: string,
-    envelope: Envelope,
-  ) => Effect.Effect<void, VaultStorageError>
-  readMeta: () => Effect.Effect<MetaState | undefined, VaultStorageError>
-  writeMeta: (meta: MetaState) => Effect.Effect<void, VaultStorageError>
-  readNodeIdentity: () => Effect.Effect<
-    NodeIdentity | undefined,
-    VaultStorageError
-  >
-  writeNodeIdentity: (
-    node: NodeIdentity,
-  ) => Effect.Effect<void, VaultStorageError>
-}
-
-export const VaultStorageService = Context.Service<VaultStorageService>(
-  'VaultStorageService',
-)
-
-export const VaultStorageLive = Layer.succeed(VaultStorageService, {
-  readPrefs,
-  writePrefs,
-  readRecord,
-  writeRecord,
-  writeRecords,
-  getAllRecords,
-  readDeviceEnvelope,
-  writeDeviceEnvelope,
-  readMeta,
-  writeMeta,
-  readNodeIdentity,
-  writeNodeIdentity,
-})

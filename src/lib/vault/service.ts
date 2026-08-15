@@ -21,12 +21,11 @@ import type { CryptoError } from './crypto-dek.ts'
 import type { PasskeyError } from './passkey.ts'
 import type { Envelope, Identity, Vault, WrappedDeK } from './schema.ts'
 
-export type VaultError =
+type VaultError =
   | VaultStorageError
   | VaultUnlockedError
   | CryptoError
   | PasskeyError
-export type { CryptoError, PasskeyError }
 
 const textEncoder = new TextEncoder()
 const KEK_SALT_BYTES = 16
@@ -36,7 +35,7 @@ const toBuf = (u: Uint8Array): ArrayBuffer => u.slice().buffer
 
 // --- Service layer (Effect v4 function-style key) ---
 
-export interface VaultService {
+interface VaultService {
   /** First run: create passkey under PRF, generate DEK, wrap under passkey+recovery code, write the v3 mirror. */
   setup: (
     recoveryCode: string,
@@ -73,20 +72,20 @@ export interface VaultService {
   session: () => Effect.Effect<VaultSession | null>
 }
 
-export const VaultService = Context.Service<VaultService>('VaultService')
+const VaultService = Context.Service<VaultService>('VaultService')
 
-export class VaultStorageError extends Schema.TaggedError<VaultStorageError>()(
+class VaultStorageError extends Schema.TaggedError<VaultStorageError>()(
   'VaultStorageError',
   { message: Schema.String },
 ) {}
 
-export class VaultUnlockedError extends Schema.TaggedError<VaultUnlockedError>()(
+class VaultUnlockedError extends Schema.TaggedError<VaultUnlockedError>()(
   'VaultUnlockedError',
   { message: Schema.String },
 ) {}
 
 /** The unlocked in-memory session: the vault DEK + decrypted tree. */
-export interface VaultSession {
+interface VaultSession {
   dek: AesKey
   vault: Vault
 }
@@ -374,7 +373,7 @@ const makeVaultImpl = (
   session: () => Ref.get(session),
 })
 
-export const VaultServiceLive = Layer.effect(
+const VaultServiceLive = Layer.effect(
   VaultService,
   Effect.gen(function* () {
     const session = yield* Ref.make<VaultSession | null>(null)

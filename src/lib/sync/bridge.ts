@@ -10,7 +10,12 @@ import {
   encodeRecordDoc,
   type HostPointer,
 } from './types.ts'
-import { getAllRecords, readMeta, readNodeIdentity, writeRecord } from '../vault/storage.ts'
+import {
+  getAllRecords,
+  readMeta,
+  readNodeIdentity,
+  writeRecord,
+} from '../vault/storage.ts'
 import { vaultImpl } from '../vault/service.ts'
 import type { Identity, Vault } from '../vault/schema.ts'
 
@@ -62,7 +67,7 @@ export const pushChanges = async (
  * the writer's DEK, no re-encryption on receipt — the doc already resolved LWW).
  * Foreign-writer records are read lazily via the writer's envelope + recovery code.
  */
-export const mergeIncoming = async (
+const mergeIncoming = async (
   sync: SyncAdapter,
   docId: string,
   ids: ReadonlyArray<string>,
@@ -112,10 +117,7 @@ export const pushSave = async (
     if (!meta?.deviceId) return
     const sync = getSyncAdapter()
     await sync.start()
-    const diff = diffVault(
-      prev ?? { formatVersion: 1, identities: [] },
-      next,
-    )
+    const diff = diffVault(prev ?? { formatVersion: 1, identities: [] }, next)
     if (diff.changed.length === 0 && diff.removedIds.length === 0) return
     await pushChanges(sync, node.docId, meta.deviceId, session.dek, diff)
     await updateHostPointer(sync, node.docId, meta.deviceId, next)

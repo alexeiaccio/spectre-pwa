@@ -1,37 +1,30 @@
-import {
-  createOptimistic,
-  Show,
-} from 'solid-js'
-import {
-  browserHistory,
-  createRouter,
-  defineRoutes,
-} from '@solidjs/router'
+import { createOptimistic, Show } from 'solid-js'
+import { browserHistory, createRouter, defineRoutes } from '@solidjs/router'
 import { useVault } from './lib/vault/use-vault.ts'
 import type { VaultApi } from './lib/vault/use-vault.ts'
 import { useIdentitySession } from './lib/spectre/use-identity-session.ts'
 import type { SessionApi } from './lib/spectre/use-identity-session.ts'
 import { useInstallPrompt } from './lib/pwa.ts'
 import { clearClipboardTimer, useLockLifecycle } from './lib/lifecycle.ts'
-import { FlowContext } from './routes/use-screen.ts'
-import type { FlowApi } from './routes/use-screen.ts'
+import { FlowContext } from './lib/flow.ts'
+import type { FlowApi } from './lib/flow.ts'
 import Header from './screens/header.tsx'
-import CatchAllRoute from './routes/catch-all-route.tsx'
-import SetupRoute from './routes/setup-route.tsx'
-import LockedRoute from './routes/locked-route.tsx'
-import JoinRoute from './routes/join-route.tsx'
-import IdentitiesRoute from './routes/identities-route.tsx'
-import IdentityRoute from './routes/identity-route.tsx'
+import ErrorScreen from './screens/error-screen.tsx'
+import SetupScreen from './screens/setup-screen.tsx'
+import LockedScreen from './screens/locked-screen.tsx'
+import JoinScreen from './screens/join-screen.tsx'
+import IdentitiesScreen from './screens/identities-screen.tsx'
+import IdentityScreen from './screens/identity-screen.tsx'
 import type { Vault } from './lib/vault/schema.ts'
 
 const Router = createRouter({
   routes: defineRoutes([
-    { path: '/', component: IdentitiesRoute },
-    { path: '/setup', component: SetupRoute },
-    { path: '/locked', component: LockedRoute },
-    { path: '/join', component: JoinRoute },
-    { path: '/identity/:uuid', component: IdentityRoute },
-    { path: '/*', component: CatchAllRoute },
+    { path: '/', component: IdentitiesScreen },
+    { path: '/setup', component: SetupScreen },
+    { path: '/locked', component: LockedScreen },
+    { path: '/join', component: JoinScreen },
+    { path: '/identity/:uuid', component: IdentityScreen },
+    { path: '/*', component: ErrorScreen },
   ]),
   history: browserHistory(),
 })

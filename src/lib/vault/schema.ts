@@ -1,7 +1,6 @@
 import { Schema } from 'effect'
 
 export const DB_NAME = 'spectre-pocket'
-export const DB_VERSION = 3
 
 export const ENVELOPE_STORE = 'envelope'
 export const PREFS_STORE = 'prefs'
@@ -10,9 +9,9 @@ export const NODE_STORE = 'node'
 export const META_STORE = 'meta'
 
 /** Algorithm version per spectre-types (2012:03=0, 2012:07=1, 2014:09=2, 2015:01=3). */
-export type AlgorithmVersion = 0 | 1 | 2 | 3
+type AlgorithmVersion = 0 | 1 | 2 | 3
 
-export type SitePurpose = 'password' | 'login' | 'answer'
+type SitePurpose = 'password' | 'login' | 'answer'
 
 export interface Site {
   id: string
@@ -41,7 +40,7 @@ export interface Vault {
 }
 
 /** Validated decode/encode of the vault JSON, used at the storage boundary. */
-export const SiteSchema = Schema.Struct({
+const SiteSchema = Schema.Struct({
   id: Schema.String,
   name: Schema.String,
   counter: Schema.Int,
@@ -64,11 +63,6 @@ export const IdentitySchema = Schema.Struct({
     Schema.Literal(3),
   ]),
   sites: Schema.Array(SiteSchema),
-})
-
-export const VaultSchema = Schema.Struct({
-  formatVersion: Schema.Literal(1),
-  identities: Schema.Array(IdentitySchema),
 })
 
 export interface WrappedDeK {
@@ -99,21 +93,10 @@ export interface NodeIdentity {
   authorKey?: string
 }
 
-export const NodeIdentitySchema = Schema.Struct({
-  secretKey: Schema.String,
-  docTicket: Schema.optional(Schema.String),
-  docId: Schema.optional(Schema.String),
-  authorKey: Schema.optional(Schema.String),
-})
-
 /** The mirror's meta state (M3): which device is "this device". */
 export interface MetaState {
   deviceId: string
 }
-
-export const MetaStateSchema = Schema.Struct({
-  deviceId: Schema.String,
-})
 
 export interface Prefs {
   theme: 'dark'

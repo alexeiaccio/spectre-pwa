@@ -11,7 +11,7 @@ const bytes = (n: number): Uint8Array =>
 const toBuf = (u: Uint8Array): ArrayBuffer => u.slice().buffer
 
 /** Determinies rpId from the current origin's registrable domain suffix. */
-export const rpId = (): string => location.hostname
+const rpId = (): string => location.hostname
 
 const asPublicKey = (cred: Credential | null): PublicKeyCredential => {
   if (!cred) throw new PasskeyError({ message: 'credential result missing' })

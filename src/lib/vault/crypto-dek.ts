@@ -9,18 +9,6 @@ const textEncoder = new TextEncoder()
 /** Encode a string to an ArrayBuffer-backed Uint8Array (satisfies BufferSource). */
 const ab = (s: string): Uint8Array => textEncoder.encode(s)
 
-const toHex = (b: Uint8Array): string =>
-  Array.from(b)
-    .map((x) => x.toString(16).padStart(2, '0'))
-    .join('')
-
-const fromHex = (hex: string): Uint8Array => {
-  const out = new Uint8Array(hex.length / 2)
-  for (let i = 0; i < out.length; i++)
-    out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16)
-  return out
-}
-
 /** Copy a Uint8Array into a fresh ArrayBuffer so BufferSource accepts it. */
 const toBuf = (u: Uint8Array): ArrayBuffer => u.slice().buffer
 
@@ -168,5 +156,3 @@ export const decryptBlob = (
         }),
     ),
   )
-
-export { toHex, fromHex, ab }

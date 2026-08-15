@@ -1,4 +1,4 @@
-import { createSignal, For, Show } from 'solid-js'
+import { createEffect, createSignal, For, Show } from 'solid-js'
 import { renderSVG } from 'uqr'
 import {
   Button,
@@ -8,7 +8,12 @@ import {
   Select,
   Text,
 } from '../components/ui/index.ts'
-import type { Identity, Prefs, Vault } from '../lib/vault/schema.ts'
+import { useScreen } from '../lib/flow.ts'
+import { getSyncAdapter } from '../lib/sync/adapter.ts'
+import { shareVaultDoc } from '../lib/sync/pairing.ts'
+import { syncNow } from '../lib/sync/bridge.ts'
+import { deleteIdentity } from '../lib/vault/mutations.ts'
+import type { Identity } from '../lib/vault/schema.ts'
 
 interface AutoLockOption {
   value: number
@@ -23,16 +28,13 @@ const AUTO_LOCK_OPTIONS: AutoLockOption[] = [
   { value: 60, label: '1 hour' },
 ]
 
-export default function IdentitiesScreen(props: {
-  vault: Vault
-  prefs: () => Prefs
-  onSelect: (id: string) => void
-  onSaveIdentity: (fullName: string, passphrase: string) => void
-  onDeleteIdentity: (identity: Identity) => void
-  onReEnroll: (code: string) => Promise<Vault | undefined>
-  onSetAutoLock: (minutes: number) => void
-  onCreateInvitation: () => Promise<string>
-}) {
+const uid = (): string =>
+  crypto.randomUUID?.() ??
+  `${Date.now()}-${Math.random().toString(36).slice(2)}`
+
+/** `/` — the identity list. */
+export default function IdentitiesScreen() {
+  const { api, view, navigate } = useScreen()
   const [newIdentity, setNewIdentity] = createSignal<{
     fullName: string
     passphrase: string
@@ -43,11 +45,45 @@ export default function IdentitiesScreen(props: {
   const [pairError, setPairError] = createSignal<string | null>(null)
   const [copied, setCopied] = createSignal(false)
 
+  // Inbound half of the bridge: re-read known keys into the mirror (experimental).
+  createEffect(
+    () => view('identities')(),
+    (s) => {
+      if (s) void syncNow()
+    },
+  )
+
+  const onSaveIdentity = async (): Promise<void> => {
+    const v = api.vaultValue()
+    const n = newIdentity()
+    if (!v || !n.fullName.trim() || n.passphrase.length < 8) return
+    const identity: Identity = {
+      id: uid(),
+      fullName: n.fullName.trim(),
+      algorithm: 3,
+      sites: [],
+    }
+    const next = { ...v, identities: [...v.identities, identity] }
+    const ok = await api.commitMutation(next)
+    if (ok) {
+      setNewIdentity({ fullName: '', passphrase: '' })
+      navigate(`/identity/${identity.id}`)
+    }
+  }
+
+  const onDeleteIdentity = async (identity: Identity): Promise<void> => {
+    const v = api.vaultValue()
+    if (!v) return
+    const next = deleteIdentity(v, identity.id)
+    const ok = await api.commitMutation(next)
+    if (ok) api.session.lock()
+  }
+
   const onCreateInvitation = async (): Promise<void> => {
     setPairing(true)
     setPairError(null)
     try {
-      const ticket = await props.onCreateInvitation()
+      const ticket = await shareVaultDoc(getSyncAdapter())
       setInvitation(ticket)
     } catch (e) {
       setPairError(e instanceof Error ? e.message : String(e))
@@ -66,12 +102,12 @@ export default function IdentitiesScreen(props: {
     <div data-screen="identities" class="flex flex-col gap-4">
       <Text>Choose an identity (passphrase is asked when you open it):</Text>
       <div class="flex flex-col gap-2">
-        <For each={props.vault.identities}>
+        <For each={api.vaultValue()?.identities ?? []}>
           {(identity) => (
             <div class="flex items-stretch gap-1">
               <button
                 class="flex tap flex-1 items-center justify-between rounded border border-surface-700 bg-surface-800 px-3 py-2 text-left text-sm text-slate-100 hover:border-teal-spectre"
-                onClick={() => props.onSelect(identity.id)}
+                onClick={() => navigate(`/identity/${identity.id}`)}
               >
                 <span class="truncate">{identity.fullName}</span>
                 <span class="ml-2 shrink-0 text-xs text-slate-500">
@@ -82,7 +118,7 @@ export default function IdentitiesScreen(props: {
               <button
                 class="tap rounded border border-surface-700 bg-surface-800 px-2 text-sm text-slate-500 hover:border-red-900 hover:text-red-400"
                 title="Delete identity"
-                onClick={() => props.onDeleteIdentity(identity)}
+                onClick={() => void onDeleteIdentity(identity)}
               >
                 ✕
               </button>
@@ -116,12 +152,7 @@ export default function IdentitiesScreen(props: {
         <Button
           variant="primary"
           disabled={newIdentity().passphrase.length < 8}
-          onClick={() =>
-            props.onSaveIdentity(
-              newIdentity().fullName,
-              newIdentity().passphrase,
-            )
-          }
+          onClick={() => void onSaveIdentity()}
         >
           Add identity
         </Button>
@@ -139,7 +170,7 @@ export default function IdentitiesScreen(props: {
           variant="primary"
           disabled={reEnrollCode().length < 8}
           onClick={() => {
-            void props.onReEnroll(reEnrollCode()).then((v) => {
+            void api.vault.reEnrollPasskey(reEnrollCode()).then((v) => {
               if (v) setReEnrollCode('')
             })
           }}
@@ -153,10 +184,10 @@ export default function IdentitiesScreen(props: {
           options={AUTO_LOCK_OPTIONS}
           value={
             AUTO_LOCK_OPTIONS.find(
-              (o) => o.value === props.prefs().autoLockMinutes,
+              (o) => o.value === api.vault.prefs().autoLockMinutes,
             ) ?? AUTO_LOCK_OPTIONS[0]
           }
-          onChange={(opt) => props.onSetAutoLock(opt.value)}
+          onChange={(opt) => void api.vault.setAutoLockMinutes(opt.value)}
         />
       </Card>
       <Card variant="dashed">

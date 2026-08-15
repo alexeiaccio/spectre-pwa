@@ -216,13 +216,10 @@ const cases: Case[] = [
     expected: { screen: { view: 'join' }, redirect: { kind: 'none' } },
   },
   {
-    name: 'unlocked at /join redirects to / (existing vaults do not re-join yet)',
+    name: 'unlocked at /join shows the join screen (existing-vault adopt-code join)',
     vault: { kind: 'unlocked', vault: VAULT },
     url: '/join',
-    expected: {
-      screen: { view: 'identities' },
-      redirect: { kind: 'redirect', to: '/', replace: true },
-    },
+    expected: { screen: { view: 'join' }, redirect: { kind: 'none' } },
   },
   {
     name: 'booting at /join keeps booting',

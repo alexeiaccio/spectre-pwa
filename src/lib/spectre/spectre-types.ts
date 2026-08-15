@@ -19,7 +19,7 @@ export const SCOPES: Record<Purpose, string> = {
 }
 
 /** resultType ids (from spectre-types.js). */
-export const RESULT_TYPE = {
+const RESULT_TYPE = {
   Maximum: 16,
   Long: 17,
   Medium: 18,
@@ -29,15 +29,6 @@ export const RESULT_TYPE = {
   Name: 30,
   Phrase: 31,
 } as const
-
-export const DEFAULT_RESULT_TYPE = {
-  password: RESULT_TYPE.Long,
-  login: RESULT_TYPE.Name,
-  answer: RESULT_TYPE.Phrase,
-} as const
-
-export const DEFAULT_COUNTER = 1
-export const MAX_COUNTER = 4294967295
 
 /**
  * Password templates, indexed by resultType. `templates[0]`-style lookup uses

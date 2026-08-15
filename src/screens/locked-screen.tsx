@@ -1,16 +1,15 @@
 import { createSignal, Show } from 'solid-js'
 import { Button, Hint, Input, Text } from '../components/ui/index.ts'
+import { useScreen } from '../lib/flow.ts'
 
-export default function LockedScreen(props: {
-  onPasskey: () => void
-  onRecovery: (code: string) => void
-  onJoin: () => void
-}) {
+/** `/locked` — vault locked. */
+export default function LockedScreen() {
+  const { api, navigate } = useScreen()
   const [code, setCode] = createSignal('')
   const [reEnrollOpen, setReEnrollOpen] = createSignal(false)
   return (
     <div data-screen="locked" class="flex flex-col gap-4">
-      <Button variant="primary" onClick={() => props.onPasskey()}>
+      <Button variant="primary" onClick={() => void api.vault.unlock()}>
         Unlock with passkey
       </Button>
       <Text>…or with your recovery code:</Text>
@@ -20,7 +19,10 @@ export default function LockedScreen(props: {
           onInput={(e) => setCode((e.target as HTMLInputElement).value)}
           placeholder="recovery code"
         />
-        <Button variant="secondary" onClick={() => props.onRecovery(code())}>
+        <Button
+          variant="secondary"
+          onClick={() => void api.vault.unlockWithRecovery(code())}
+        >
           Unlock with code
         </Button>
         <button
@@ -37,7 +39,7 @@ export default function LockedScreen(props: {
         </Show>
         <button
           class="text-xs text-slate-500 underline hover:text-slate-300"
-          onClick={() => props.onJoin()}
+          onClick={() => navigate('/join')}
         >
           I have a vault on another device — join it
         </button>

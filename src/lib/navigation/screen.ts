@@ -10,7 +10,7 @@ export type Screen =
   | { view: 'identity'; id: string; status: SessionStatus }
   | { view: 'join' }
 
-export type RedirectDecision =
+type RedirectDecision =
   | { kind: 'none' }
   | { kind: 'redirect'; to: string; replace: boolean }
 

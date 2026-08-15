@@ -1,10 +1,10 @@
 import { createSignal } from 'solid-js'
 import { Button, Input, Text } from '../components/ui/index.ts'
+import { useScreen } from '../lib/flow.ts'
 
-export default function SetupScreen(props: {
-  onSubmit: (code: string) => void
-  onJoin: () => void
-}) {
+/** `/setup` — first run. */
+export default function SetupScreen() {
+  const { api, navigate } = useScreen()
   const [code, setCode] = createSignal('')
   return (
     <div data-screen="setup" class="flex flex-col gap-4">
@@ -17,12 +17,12 @@ export default function SetupScreen(props: {
         onInput={(e) => setCode((e.target as HTMLInputElement).value)}
         placeholder="recovery code"
       />
-      <Button variant="primary" onClick={() => props.onSubmit(code())}>
+      <Button variant="primary" onClick={() => void api.vault.setup(code())}>
         Create vault
       </Button>
       <button
         class="text-xs text-slate-500 underline hover:text-slate-300"
-        onClick={() => props.onJoin()}
+        onClick={() => navigate('/join')}
       >
         I have a vault on another device — join it
       </button>

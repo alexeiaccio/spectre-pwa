@@ -1,5 +1,6 @@
 import { createSignal, Show } from 'solid-js'
 import { Clock, Effect } from 'effect'
+import { useScreen } from '../lib/flow.ts'
 import {
   Accent,
   Button,
@@ -16,7 +17,11 @@ import {
   persistDoc,
 } from '../lib/sync/adapter.ts'
 import type { SyncAdapter } from '../lib/sync/adapter.ts'
-import { adoptHostCode, reencryptUnderDekB, verifyRecoveryCode } from '../lib/sync/records.ts'
+import {
+  adoptHostCode,
+  reencryptUnderDekB,
+  verifyRecoveryCode,
+} from '../lib/sync/records.ts'
 import {
   HOST_KEY,
   decodeEnvelopeDoc,
@@ -31,11 +36,14 @@ import {
 import { readDeviceEnvelope, readMeta } from '../lib/vault/storage.ts'
 import { vaultImpl } from '../lib/vault/service.ts'
 import { createPasskeyWithPrf, getPrfOutput } from '../lib/vault/passkey.ts'
-import type { AesKey } from '../lib/vault/crypto-dek.ts'
-import type { Envelope, Vault } from '../lib/vault/schema.ts'
-import type { VaultStatus } from '../lib/vault/use-vault.ts'
 
-type JoinStep = 'unlock' | 'invite' | 'syncing' | 'recovery' | 'enrolling' | 'adopting'
+type JoinStep =
+  | 'unlock'
+  | 'invite'
+  | 'syncing'
+  | 'recovery'
+  | 'enrolling'
+  | 'adopting'
 
 /**
  * Poll `fn` until it returns a value, the Effect `Clock` passes the deadline,
@@ -59,19 +67,8 @@ const waitForValue = (
     }),
   )
 
-export default function JoinScreen(props: {
-  vaultStatus: () => VaultStatus
-  onUnlockLocal: (
-    method: { kind: 'passkey' } | { kind: 'recovery'; code: string },
-  ) => Promise<boolean>
-  onComplete: (joined: {
-    deviceId: string
-    envelope: Envelope
-    records: Map<string, SyncRecord>
-    dek: AesKey
-  }) => Promise<Vault | undefined>
-  onBack: () => void
-}) {
+export default function JoinScreen() {
+  const { api, navigate } = useScreen()
   const [step, setStep] = createSignal<JoinStep>('invite')
   const [ticket, setTicket] = createSignal('')
   const [code, setCode] = createSignal('')
@@ -81,8 +78,8 @@ export default function JoinScreen(props: {
 
   // A device that already has a vault joins by adopting the host's code.
   const existingVault = (): boolean =>
-    props.vaultStatus().kind === 'locked' ||
-    props.vaultStatus().kind === 'unlocked'
+    api.vault.status().kind === 'locked' ||
+    api.vault.status().kind === 'unlocked'
 
   let sync: SyncAdapter | null = null
   let docId = ''
@@ -95,7 +92,12 @@ export default function JoinScreen(props: {
     setError(null)
     setBusy(true)
     try {
-      const ok = await props.onUnlockLocal(method)
+      const ok =
+        method.kind === 'passkey'
+          ? await api.vault.unlock().then((v) => v !== undefined)
+          : await api.vault
+              .unlockWithRecovery(method.code)
+              .then((v) => v !== undefined)
       if (ok) setStep('invite')
       else setError('could not unlock this device')
     } catch (e) {
@@ -208,14 +210,14 @@ export default function JoinScreen(props: {
         encodeEnvelopeDoc(joined.envelope),
       )
       // Complete locally: adopt the joined records + envelope under DEK-B.
-      const result = await props.onComplete({
+      const result = await api.vault.importJoined({
         deviceId: joined.envelope.deviceId,
         envelope: { version: 1, deks: joined.envelope.deks },
         records: joined.records,
         dek: joined.dek,
       })
       if (!result) setError('could not save the joined vault')
-      else props.onBack() // route to / (identities) — the router takes over
+      else navigate('/') // route to / (identities) — the router takes over
       // On success the vault status becomes unlocked and the router takes over.
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -240,8 +242,7 @@ export default function JoinScreen(props: {
       if (!localEnvelope)
         throw new SyncUnavailableError({ message: 'no local envelope' })
       const session = await Effect.runPromise(vaultImpl.session())
-      if (!session)
-        throw new SyncUnavailableError({ message: 'vault locked' })
+      if (!session) throw new SyncUnavailableError({ message: 'vault locked' })
       const passkeyRec = localEnvelope.deks.find((d) => d.method === 'passkey')
       if (!passkeyRec?.prfSalt || !passkeyRec.credId)
         throw new SyncUnavailableError({ message: 'no passkey record' })
@@ -268,14 +269,14 @@ export default function JoinScreen(props: {
         envelopeKey(meta.deviceId),
         encodeEnvelopeDoc(joined.envelope),
       )
-      const result = await props.onComplete({
+      const result = await api.vault.importJoined({
         deviceId: meta.deviceId,
         envelope: { version: 1, deks: joined.envelope.deks },
         records: joined.records,
         dek: joined.dek,
       })
       if (!result) setError('could not save the joined vault')
-      else props.onBack() // route to / (identities)
+      else navigate('/') // route to / (identities)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -289,13 +290,13 @@ export default function JoinScreen(props: {
         <p class="text-lg font-medium text-slate-100">Join a vault</p>
         <button
           class="text-xs text-slate-500 hover:text-slate-300"
-          onClick={() => props.onBack()}
+          onClick={() => navigate('/')}
         >
           ← back
         </button>
       </div>
 
-      <Show when={props.vaultStatus().kind === 'locked'}>
+      <Show when={api.vault.status().kind === 'locked'}>
         <Hint>
           This device already has a vault — joining adopts the other device's
           recovery code; this vault's identities merge in (your old code stops
@@ -313,7 +314,10 @@ export default function JoinScreen(props: {
       </Show>
 
       <Show when={step() === 'unlock'}>
-        <Text>Unlock this device first (its identities will merge into the joined vault):</Text>
+        <Text>
+          Unlock this device first (its identities will merge into the joined
+          vault):
+        </Text>
         <Button
           variant="primary"
           onClick={() => void unlockLocal({ kind: 'passkey' })}
@@ -329,7 +333,9 @@ export default function JoinScreen(props: {
         <Button
           variant="secondary"
           disabled={localCode().length < 8}
-          onClick={() => void unlockLocal({ kind: 'recovery', code: localCode() })}
+          onClick={() =>
+            void unlockLocal({ kind: 'recovery', code: localCode() })
+          }
         >
           Unlock with code
         </Button>

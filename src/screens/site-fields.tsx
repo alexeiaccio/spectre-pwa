@@ -13,7 +13,7 @@ export const PURPOSE_LABEL: Record<Site['purpose'], string> = {
   answer: 'security answer',
 }
 
-export const TEMPLATES: Record<string, number> = {
+const TEMPLATES: Record<string, number> = {
   Long: 17,
   Maximum: 16,
   Medium: 18,

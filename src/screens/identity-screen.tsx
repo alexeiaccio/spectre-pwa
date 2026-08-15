@@ -18,21 +18,31 @@ import {
 import { PURPOSE_LABEL, NEW_SITE_DRAFT, SiteFields } from './site-fields.tsx'
 import type { SiteFormState } from './site-fields.tsx'
 import { copyWithAutoClear } from '../lib/lifecycle.ts'
-import type { Identity, Site } from '../lib/vault/schema.ts'
+import { useScreen } from '../lib/flow.ts'
+import { addSite, deleteSite, updateSite } from '../lib/vault/mutations.ts'
+import type { Site } from '../lib/vault/schema.ts'
 import type { SessionStatus } from '../lib/spectre/use-identity-session.ts'
 
-export default function IdentityScreen(props: {
-  identity: Identity
-  sessionStatus: () => SessionStatus
-  sessionIdentityId: () => string | null
-  onUnlockIdentity: (identity: Identity, passphrase: string) => Promise<boolean>
-  onBack: () => void
-  onLockSession: () => void
-  onDerive: (site: Site) => Promise<string | undefined>
-  onAddSite: (identityId: string, site: Site) => void
-  onUpdateSite: (identityId: string, site: Site, draft: SiteFormState) => void
-  onDeleteSite: (identityId: string, siteId: string) => void
-}) {
+const uid = (): string =>
+  crypto.randomUUID?.() ??
+  `${Date.now()}-${Math.random().toString(36).slice(2)}`
+
+/** `/identity/:uuid` — one identity's sites. */
+export default function IdentityScreen() {
+  const { api, view, navigate } = useScreen()
+  const detail = createMemo(() => {
+    const s = view('identity')()
+    if (!s) return undefined
+    const found = api.vaultValue()?.identities.find((i) => i.id === s.id)
+    return found ? { s, identity: found } : undefined
+  })
+  const identity = createMemo(() => detail()?.identity)
+  const sessionStatus = createMemo(() => api.session.status())
+  const sessionIdentityId = createMemo(() => api.session.identityId())
+  const onBack = (): void => {
+    api.session.lock()
+    navigate('/')
+  }
   const [passphrase, setPassphrase] = createSignal('')
   const [recent, setRecent] = createSignal<{
     site: Site
@@ -58,24 +68,22 @@ export default function IdentityScreen(props: {
   // A ready session unlocked for a different identity must not serve this
   // identity's sites — treat it as idle and lock the stale session.
   const effective = createMemo((): SessionStatus => {
-    const s = props.sessionStatus()
-    if (s.kind === 'ready' && props.sessionIdentityId() !== props.identity.id) {
+    const s = sessionStatus()
+    if (s.kind === 'ready' && sessionIdentityId() !== identity()?.id) {
       return { kind: 'idle' }
     }
     return s
   })
   createEffect(
     () => {
-      const s = props.sessionStatus()
-      return (
-        s.kind === 'ready' && props.sessionIdentityId() !== props.identity.id
-      )
+      const s = sessionStatus()
+      return s.kind === 'ready' && sessionIdentityId() !== identity()?.id
     },
     // Locking the stale session reads its own signals past the callback
     // boundary — the structural rule can't see the createEffect context.
     // eslint-disable-next-line solid/reactivity
     (mismatch) => {
-      if (mismatch) props.onLockSession()
+      if (mismatch) api.session.lock()
     },
   )
 
@@ -86,7 +94,9 @@ export default function IdentityScreen(props: {
     ) : null
   })
   const onUnlockIdentity = async (): Promise<void> => {
-    const done = await props.onUnlockIdentity(props.identity, passphrase())
+    const id = identity()
+    if (!id) return
+    const done = await api.session.unlock(id, passphrase())
     if (done) {
       setPassphrase('')
       setRecent(null)
@@ -94,12 +104,11 @@ export default function IdentityScreen(props: {
   }
 
   const onAddSite = async (): Promise<void> => {
+    const id = identity()
     const n = newSite()
-    if (!n.name.trim()) return
+    if (!id || !n.name.trim()) return
     const site: Site = {
-      id:
-        crypto.randomUUID?.() ??
-        `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      id: uid(),
       name: n.name.trim(),
       counter: n.counter,
       template: n.template,
@@ -107,7 +116,9 @@ export default function IdentityScreen(props: {
       answer:
         n.purpose === 'answer' && n.answer.trim() ? n.answer.trim() : undefined,
     }
-    props.onAddSite(props.identity.id, site)
+    const v = api.vaultValue()
+    if (!v) return
+    await api.commitMutation(addSite(v, id.id, site))
     setNewSite({ ...NEW_SITE_DRAFT })
   }
 
@@ -127,16 +138,31 @@ export default function IdentityScreen(props: {
   }
 
   const onUpdateSite = async (site: Site): Promise<void> => {
+    const id = identity()
     const d = editDraft()
-    if (!d.name.trim()) return
-    props.onUpdateSite(props.identity.id, site, d)
+    if (!id || !d.name.trim()) return
+    const v = api.vaultValue()
+    if (!v) return
+    const updated: Site = {
+      ...site,
+      name: d.name.trim(),
+      counter: d.counter,
+      template: d.template,
+      purpose: d.purpose,
+      answer:
+        d.purpose === 'answer' && d.answer.trim() ? d.answer.trim() : undefined,
+    }
+    await api.commitMutation(updateSite(v, id.id, updated))
     setEditingId(null)
     setRecent(null)
     setCopiedId(null)
   }
 
   const onDeleteSite = async (site: Site): Promise<void> => {
-    props.onDeleteSite(props.identity.id, site.id)
+    const id = identity()
+    const v = api.vaultValue()
+    if (!id || !v) return
+    await api.commitMutation(deleteSite(v, id.id, site.id))
     setEditingId(null)
     setRecent(null)
     setCopiedId(null)
@@ -144,7 +170,7 @@ export default function IdentityScreen(props: {
 
   const onDerive = async (site: Site): Promise<void> => {
     setDerivingId(site.id) // optimistic pending — row shows "Deriving…"
-    const value = await props.onDerive(site)
+    const value = await api.session.derive(site)
     setDerivingId(null) // reconcile: value is in `recent` on success, absent on failure
     if (value !== undefined) setRecent({ site, value })
   }
@@ -174,16 +200,14 @@ export default function IdentityScreen(props: {
   return (
     <div
       data-screen="identity"
-      data-id={props.identity.id}
+      data-id={identity()?.id}
       class="flex flex-col gap-4"
     >
       <div class="flex items-center justify-between">
-        <p class="text-lg font-medium text-slate-100">
-          {props.identity.fullName}
-        </p>
+        <p class="text-lg font-medium text-slate-100">{identity()?.fullName}</p>
         <button
           class="text-xs text-slate-500 hover:text-slate-300"
-          onClick={() => props.onBack()}
+          onClick={onBack}
         >
           ← identities
         </button>
@@ -224,7 +248,7 @@ export default function IdentityScreen(props: {
             Tap a site to reveal it; tap the value to copy (auto-clears after
             30s).
           </Hint>
-          <For each={props.identity.sites}>
+          <For each={identity()?.sites ?? []}>
             {(site) => {
               const revealed = createMemo(() => recent()?.site.id === site.id)
               return (
