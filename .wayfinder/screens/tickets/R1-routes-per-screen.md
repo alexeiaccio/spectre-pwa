@@ -2,7 +2,7 @@
 id: R1
 title: Route per screen + slim deriveScreen
 type: refactor
-status: open
+status: closed
 blocked_by: []
 assigned:
 ---

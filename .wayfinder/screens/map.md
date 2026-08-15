@@ -26,7 +26,7 @@ Target shape:
 
 <!-- one line per closed ticket -->
 
-- R1 · Routes-per-screen vs single-shell — **in progress**. Chart the split; the `identity/:uuid` route is the tricky one (validates the id, needs the session).
+- R1 · Routes-per-screen vs single-shell — **done**. Each path mounts its own route component (`src/routes/`); the `ScreenShell`/7-`Match` switch is gone. `deriveScreen` still drives redirects via `useScreen()`; routes render directly (identity guards uuid, catch-all handles booting/error). Verified locked→unlock→identities flow + 80 tests.
 - **Framework check (2026-08-15): no meta-framework / compiler swap.** `solid-start@next` (0.1.0-alpha.105) is a stale Solid-1-era alpha (peers `solid-js@^1.5`, `vite@^3`, `router@0.4`) and is SSR/server-oriented — wrong for an offline-only PWA. `dom-expressions@next` is already used transitively via `vite-plugin-solid`. `@tanstack/solid-start@beta` exists for Solid 2 but adds server machinery we don't need. Decision: stay on `@solidjs/router@2` + Vite, client-only. R1 continues.
 
 ## Tickets
