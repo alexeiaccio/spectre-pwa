@@ -26,11 +26,7 @@ export default function SetupScreen() {
           placeholder="recovery code"
           autocomplete="new-password"
         />
-        <Button
-          variant="primary"
-          type="submit"
-          disabled={noCode()}
-        >
+        <Button variant="primary" type="submit" disabled={noCode()}>
           Create vault with passkey
         </Button>
         <Show when={noCode()}>

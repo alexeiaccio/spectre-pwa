@@ -1,7 +1,8 @@
 import { Show } from 'solid-js'
 import type { JSX } from '@solidjs/web'
 
-const nextId = (): string => `textarea-${crypto.randomUUID?.() ?? Math.random().toString(36).slice(2)}`
+const nextId = (): string =>
+  `textarea-${crypto.randomUUID?.() ?? Math.random().toString(36).slice(2)}`
 
 /** B/W-themed labelled multiline textarea, `w-full` + touch target. */
 export function Textarea(props: {

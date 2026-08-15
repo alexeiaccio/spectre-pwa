@@ -152,11 +152,9 @@ export default function SettingsScreen() {
           class="flex flex-col gap-2"
           onSubmit={(e) => {
             e.preventDefault()
-            void api.vault
-              .reEnrollPasskey(reEnrollCode())
-              .then((v) => {
-                if (v) setReEnrollCode('')
-              })
+            void api.vault.reEnrollPasskey(reEnrollCode()).then((v) => {
+              if (v) setReEnrollCode('')
+            })
           }}
         >
           <Hint>
@@ -181,7 +179,7 @@ export default function SettingsScreen() {
         </form>
       </Card>
       <Card variant="dashed">
-        <Hint>Auto-lock after hiding the app:</Hint>
+        <Hint>Auto-lock after inactivity or hiding the app:</Hint>
         <Select
           options={AUTO_LOCK_OPTIONS}
           value={

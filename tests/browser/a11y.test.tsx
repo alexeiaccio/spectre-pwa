@@ -91,10 +91,7 @@ beforeEach(() => {
   window.history.replaceState({}, '', '/')
 })
 
-const fill = async (
-  input: HTMLElement,
-  value: string,
-): Promise<void> => {
+const fill = async (input: HTMLElement, value: string): Promise<void> => {
   fireEvent.input(input, { target: { value } })
   await Promise.resolve()
 }
@@ -102,7 +99,10 @@ const fill = async (
 test('setup: recovery-code field is labelled and the form submits vault.setup', async () => {
   const calls = newCalls()
   render(() => (
-    <App vault={fakeVault({ kind: 'needs-setup' }, calls)} session={fakeSession()} />
+    <App
+      vault={fakeVault({ kind: 'needs-setup' }, calls)}
+      session={fakeSession()}
+    />
   ))
   const input = await screen.findByLabelText('Recovery code')
   await fill(input, 'my-recovery')
@@ -154,7 +154,10 @@ test('settings: add-identity fields are labelled and the form commits the identi
     />
   ))
   await fill(await screen.findByLabelText('Full name'), 'Ada Lovelace')
-  await fill(await screen.findByLabelText('Passphrase'), 'correct-horse-battery')
+  await fill(
+    await screen.findByLabelText('Passphrase'),
+    'correct-horse-battery',
+  )
   const form = (await screen.findByText('Add identity')).closest('form')
   fireEvent.submit(form!)
   await waitFor(() => expect(calls.save).toBe(1))
@@ -163,7 +166,10 @@ test('settings: add-identity fields are labelled and the form commits the identi
 test('join: invitation field is labelled inside a form with a submit action', async () => {
   window.history.replaceState({}, '', '/join')
   render(() => (
-    <App vault={fakeVault({ kind: 'needs-setup' }, newCalls())} session={fakeSession()} />
+    <App
+      vault={fakeVault({ kind: 'needs-setup' }, newCalls())}
+      session={fakeSession()}
+    />
   ))
   const textarea = await screen.findByLabelText('Invitation string')
   expect(textarea.tagName).toBe('TEXTAREA')

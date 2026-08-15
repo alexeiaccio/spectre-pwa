@@ -37,12 +37,21 @@ export function useIdenticon(
   return icon
 }
 
-/** Renders the 4-glyph identicon figure in its derived color. */
+/**
+ * Renders the 4-glyph identicon figure in its derived color. The empty
+ * placeholder keeps its footprint (same 4 monospace glyphs) but stays
+ * invisible — a row of dim dots reads as rendering artifacts, not a hint.
+ */
 export function Identicon(props: { value: () => Identicon; size?: 'lg' }) {
-  const cls = () =>
-    props.size === 'lg'
-      ? 'font-mono text-3xl leading-none'
-      : 'font-mono text-xl leading-none'
+  const cls = () => {
+    const base =
+      props.size === 'lg'
+        ? 'font-mono text-3xl leading-none'
+        : 'font-mono text-xl leading-none'
+    return props.value() === EMPTY_IDENTICON
+      ? `${base} invisible`
+      : base
+  }
   return (
     <span
       class={cls()}
