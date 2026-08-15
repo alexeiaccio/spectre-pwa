@@ -1,6 +1,7 @@
 import { createSignal, Show } from 'solid-js'
 import { BrowserQRCodeReader } from '@zxing/browser'
 import jsQR from 'jsqr'
+import { Button } from './button.tsx'
 import { ErrorText, Hint } from './text.tsx'
 
 /** Try zxing then jsQR (with inversion) on a canvas; null if neither reads it. */
@@ -33,6 +34,7 @@ const decodeCanvas = async (canvas: HTMLCanvasElement): Promise<string | null> =
 export function QrImagePicker(props: { onScan: (text: string) => void }) {
   const [busy, setBusy] = createSignal(false)
   const [error, setError] = createSignal('')
+  let inputRef: HTMLInputElement | undefined
 
   const onPick = async (file: File | undefined): Promise<void> => {
     if (!file) return
@@ -74,16 +76,22 @@ export function QrImagePicker(props: { onScan: (text: string) => void }) {
 
   return (
     <div class="flex flex-col gap-2">
-      <label class="flex items-center justify-center rounded border border-surface-700 bg-surface-800 px-3 py-2 text-sm text-slate-200 hover:border-teal-spectre">
+      <Button
+        variant="secondary"
+        disabled={busy()}
+        onClick={() => inputRef?.click()}
+      >
         {busy() ? 'Reading image…' : 'Choose a QR image'}
-        <input
-          type="file"
-          accept="image/*"
-          class="hidden"
-          disabled={busy()}
-          onChange={(e) => void onPick(e.target.files?.[0])}
-        />
-      </label>
+      </Button>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        class="hidden"
+        tabindex={-1}
+        aria-hidden="true"
+        onChange={(e) => void onPick(e.target.files?.[0])}
+      />
       <Show when={error()}>
         <ErrorText>{error()}</ErrorText>
       </Show>

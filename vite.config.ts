@@ -2,6 +2,7 @@ import { defineConfig } from 'vite'
 import solid from 'vite-plugin-solid'
 import tailwindcss from '@tailwindcss/vite'
 import oxlint from 'vite-plugin-oxlint'
+import mkcert from 'vite-plugin-mkcert'
 import { VitePWA } from 'vite-plugin-pwa'
 import { resolve } from 'node:path'
 import { execSync } from 'node:child_process'
@@ -28,6 +29,12 @@ const appVersion = (): string => {
 }
 
 export default defineConfig({
+  server: {
+    // Expose on the LAN and serve HTTPS (mkcert) so a phone on the same Wi-Fi
+    // can reach the camera API (secure context required). The mkcert CA must be
+    // installed on the dev machine (`mkcert -install`) and on the phone.
+    host: true,
+  },
   build: {
     rollupOptions: {
       input: {
@@ -42,6 +49,7 @@ export default defineConfig({
   plugins: [
     solid(),
     tailwindcss(),
+    mkcert(),
     oxlint({ configFile: '.oxlintrc.json' }),
     VitePWA({
       // `prompt` instead of `autoUpdate`: a new service worker installs and
