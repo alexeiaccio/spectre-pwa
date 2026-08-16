@@ -143,6 +143,40 @@ export default function IdentityScreen() {
       if (target) void api.session.unlock(target.id, target.passphrase)
     },
   )
+
+  // Live "future password" preview while filling the add-site form: derive
+  // from the draft on every change (HMAC is cheap). A seq token drops stale
+  // async results when the draft changes mid-derive.
+  const [previewValue, setPreviewValue] = createSignal<string | null>(null)
+  let previewSeq = 0
+  createEffect(
+    () => {
+      const n = newSite()
+      const ready = effective().kind === 'ready'
+      return ready && n.name.trim() ? { ...n, name: n.name.trim() } : null
+    },
+    (draft) => {
+      if (!draft) {
+        setPreviewValue(null)
+        return
+      }
+      const id = ++previewSeq
+      const site: Site = {
+        id: 'preview',
+        name: draft.name,
+        counter: draft.counter,
+        template: draft.template,
+        purpose: draft.purpose,
+        answer:
+          draft.purpose === 'answer' && draft.answer.trim()
+            ? draft.answer.trim()
+            : undefined,
+      }
+      void api.session.derive(site).then((v) => {
+        if (id === previewSeq) setPreviewValue(v ?? null)
+      })
+    },
+  )
   const onUnlockIdentity = async (): Promise<void> => {
     const id = identity()
     const entered = passphrase()
@@ -255,6 +289,14 @@ export default function IdentityScreen() {
           namePlaceholder="site name, e.g. twitter.com"
           collapsible
         />
+        <Show when={previewValue()}>
+          <div class="flex items-center justify-between gap-2 rounded border border-surface-700 bg-surface-800 px-3 py-2">
+            <span class="font-mono text-sm break-all text-teal-spectre">
+              {previewValue()}
+            </span>
+            <span class="shrink-0 text-xs text-slate-500">preview</span>
+          </div>
+        </Show>
         <Button variant="primary" type="submit">
           Add site
         </Button>
