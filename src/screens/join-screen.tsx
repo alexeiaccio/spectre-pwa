@@ -387,6 +387,7 @@ export default function JoinScreen() {
             placeholder="recovery code"
             type="password"
             autocomplete="current-password"
+            revealable
           />
           <Button
             variant="secondary"
@@ -507,6 +508,7 @@ export default function JoinScreen() {
             placeholder="recovery code"
             type="password"
             autocomplete="current-password"
+            revealable
           />
           <Button variant="primary" type="submit" disabled={code().length < 8}>
             Unlock &amp; join

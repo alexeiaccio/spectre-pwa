@@ -16,6 +16,9 @@ const VAULT: Vault = {
   identities: [{ id: 'abc-123', fullName: 'Robert', algorithm: 3, sites: [] }],
 }
 
+/** Empty vault: the "Add identity" disclosure on `/` is open by default. */
+const EMPTY_VAULT: Vault = { formatVersion: 1, identities: [] }
+
 interface Calls {
   setup: string[]
   setupRecoveryOnly: string[]
@@ -144,12 +147,12 @@ test('identity unlock: passphrase field is labelled and the form submits session
   )
 })
 
-test('settings: add-identity fields are labelled and the form commits the identity', async () => {
+test('identities: add-identity fields are labelled and the form commits the identity', async () => {
   const calls = newCalls()
-  window.history.replaceState({}, '', '/settings')
+  window.history.replaceState({}, '', '/')
   render(() => (
     <App
-      vault={fakeVault({ kind: 'unlocked', vault: VAULT }, calls)}
+      vault={fakeVault({ kind: 'unlocked', vault: EMPTY_VAULT }, calls)}
       session={fakeSession()}
     />
   ))
@@ -158,23 +161,24 @@ test('settings: add-identity fields are labelled and the form commits the identi
     await screen.findByLabelText('Passphrase'),
     'correct-horse-battery',
   )
-  const form = (await screen.findByText('Add identity')).closest('form')
+  const form = (
+    await screen.findByRole('button', { name: 'Add identity' })
+  ).closest('form')
   fireEvent.submit(form!)
   await waitFor(() => expect(calls.save).toBe(1))
 })
 
-test('settings: identicon placeholder stays hidden until name + passphrase yield a figure', async () => {
-  window.history.replaceState({}, '', '/settings')
+test('identities: identicon placeholder stays hidden until name + passphrase yield a figure', async () => {
+  window.history.replaceState({}, '', '/')
   render(() => (
     <App
-      vault={fakeVault({ kind: 'unlocked', vault: VAULT }, newCalls())}
+      vault={fakeVault({ kind: 'unlocked', vault: EMPTY_VAULT }, newCalls())}
       session={fakeSession()}
     />
   ))
-  const hint = await screen.findByText(
-    'Add an identity (passphrase is your Spectre secret):',
-  )
-  const icon = hint.closest('form')!.querySelector('span[aria-hidden="true"]')!
+  const icon = (
+    await screen.findByLabelText('Full name')
+  ).closest('form')!.querySelector('span[aria-hidden="true"]')!
   expect(icon.classList.contains('invisible')).toBe(true)
   await fill(await screen.findByLabelText('Full name'), 'Ada Lovelace')
   await fill(

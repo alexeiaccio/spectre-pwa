@@ -3,16 +3,13 @@ import {
   Button,
   Card,
   Hint,
-  Identicon,
   Input,
   QrCode,
   Select,
-  useIdenticon,
 } from '../components/ui/index.ts'
 import { useScreen } from '../lib/flow.ts'
 import { getSyncAdapter } from '../lib/sync/adapter.ts'
 import { shareVaultDoc } from '../lib/sync/pairing.ts'
-import type { Identity } from '../lib/vault/schema.ts'
 
 interface AutoLockOption {
   value: number
@@ -27,17 +24,9 @@ const AUTO_LOCK_OPTIONS: AutoLockOption[] = [
   { value: 60, label: '1 hour' },
 ]
 
-const uid = (): string =>
-  crypto.randomUUID?.() ??
-  `${Date.now()}-${Math.random().toString(36).slice(2)}`
-
-/** `/settings` — add identity + vault settings (reachable only when unlocked). */
+/** `/settings` — vault settings: re-enroll, auto-lock, sync/pairing. */
 export default function SettingsScreen() {
   const { api, navigate } = useScreen()
-  const [newIdentity, setNewIdentity] = createSignal<{
-    fullName: string
-    passphrase: string
-  }>({ fullName: '', passphrase: '' })
   const [reEnrollCode, setReEnrollCode] = createSignal('')
   const [invitation, setInvitation] = createSignal('')
   const [pairing, setPairing] = createSignal(false)
@@ -74,31 +63,6 @@ export default function SettingsScreen() {
     },
   )
 
-  // Live identicon while the identity (full name + secret) is being generated.
-  const identicon = useIdenticon(
-    () => newIdentity().fullName,
-    () => newIdentity().passphrase,
-  )
-
-  const onSaveIdentity = async (): Promise<void> => {
-    const v = api.vaultValue()
-    const n = newIdentity()
-    if (!v || !n.fullName.trim() || n.passphrase.length < 8) return
-    const identity: Identity = {
-      id: uid(),
-      fullName: n.fullName.trim(),
-      algorithm: 3,
-      sites: [],
-      passphrase: n.passphrase,
-    }
-    const next = { ...v, identities: [...v.identities, identity] }
-    const ok = await api.commitMutation(next)
-    if (ok) {
-      setNewIdentity({ fullName: '', passphrase: '' })
-      navigate(`/identity/${identity.id}`)
-    }
-  }
-
   const onCreateInvitation = async (): Promise<void> => {
     setPairing(true)
     setPairError(null)
@@ -129,54 +93,6 @@ export default function SettingsScreen() {
           ← identities
         </button>
       </div>
-      <Card variant="dashed">
-        <form
-          class="flex flex-col gap-2"
-          onSubmit={(e) => {
-            e.preventDefault()
-            void onSaveIdentity()
-          }}
-        >
-          <Hint>Add an identity (passphrase is your Spectre secret):</Hint>
-          <div class="flex items-center gap-3">
-            <Identicon value={identicon} size="lg" />
-            <div class="flex flex-1 flex-col gap-2">
-              <Input
-                label="Full name"
-                value={newIdentity().fullName}
-                onInput={(e) =>
-                  setNewIdentity((n) => ({
-                    ...n,
-                    fullName: (e.target as HTMLInputElement).value,
-                  }))
-                }
-                placeholder="full name"
-                autocomplete="name"
-              />
-              <Input
-                label="Passphrase"
-                value={newIdentity().passphrase}
-                onInput={(e) =>
-                  setNewIdentity((n) => ({
-                    ...n,
-                    passphrase: (e.target as HTMLInputElement).value,
-                  }))
-                }
-                placeholder="passphrase (min 8)"
-                type="password"
-                autocomplete="new-password"
-              />
-            </div>
-          </div>
-          <Button
-            variant="primary"
-            type="submit"
-            disabled={newIdentity().passphrase.length < 8}
-          >
-            Add identity
-          </Button>
-        </form>
-      </Card>
       <Card variant="dashed">
         <form
           class="flex flex-col gap-2"
