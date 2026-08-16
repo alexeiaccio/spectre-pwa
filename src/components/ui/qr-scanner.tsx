@@ -31,11 +31,15 @@ export function QrScanner(props: {
   onScan: (text: string) => void
   onError?: (e: unknown) => void
 }) {
-  let videoEl: HTMLVideoElement | undefined
+  // The video ref must be a signal: a plain `let` is read once, non-reactively,
+  // so the setup effect would see `undefined` (Solid 2 effects run before the
+  // ref callback assigns it) and never request the camera.
+  const [video, setVideo] = createSignal<HTMLVideoElement | undefined>()
   let controls: IScannerControls | null = null
   let stream: MediaStream | null = null
   let pendingTimer: number | null = null
   let settled = false
+  let started = false
   const [status, setStatus] = createSignal<Status>('starting')
   const [message, setMessage] = createSignal('')
 
@@ -51,12 +55,13 @@ export function QrScanner(props: {
   }
   onCleanup(stopCamera)
 
-  // Solid 2 rc has no onMount — a depless effect runs once after the video ref
-  // is assigned (refs are set during render, effects flush after).
+  // Solid 2 rc has no onMount — the effect runs on the video signal changing
+  // (ref assigned during render), which also re-runs if the parent swaps props.
   createEffect(
-    () => ({ video: videoEl, onScan: props.onScan, onError: props.onError }),
+    () => ({ video: video(), onScan: props.onScan, onError: props.onError }),
     ({ video, onScan, onError }) => {
-      if (!video || controls) return
+      if (!video || started) return
+      started = true
 
       const start = async (): Promise<void> => {
         let s: MediaStream
@@ -124,9 +129,7 @@ export function QrScanner(props: {
   return (
     <div class="flex flex-col gap-2">
       <video
-        ref={(el) => {
-          videoEl = el
-        }}
+        ref={setVideo}
         autoplay
         muted
         playsinline

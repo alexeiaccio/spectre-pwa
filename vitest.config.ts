@@ -31,7 +31,19 @@ export default defineConfig({
             enabled: true,
             provider: playwright(),
             headless: true,
-            instances: [{ browser: 'chromium' }],
+            instances: [
+              {
+                browser: 'chromium',
+                // Fake camera + auto-granted permission: lets the QR-scanner
+                // test exercise the real getUserMedia path in headless CI.
+                launchOptions: {
+                  args: [
+                    '--use-fake-device-for-media-stream',
+                    '--use-fake-ui-for-media-stream',
+                  ],
+                },
+              },
+            ],
             viewport: { width: 390, height: 844 },
             api: { host: 'localhost' },
           },
