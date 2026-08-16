@@ -22,13 +22,15 @@
     "build:wasm": "cd crates/spectre-sync && CC_wasm32_unknown_unknown=/opt/homebrew/opt/llvm@21/bin/clang AR_wasm32_unknown_unknown=/opt/homebrew/opt/llvm@21/bin/llvm-ar cargo build --release --target wasm32-unknown-unknown && wasm-bindgen --target web --out-dir wasm-out target/wasm32-unknown-unknown/release/spectre_sync.wasm && wasm-opt --enable-nontrapping-float-to-int --enable-bulk-memory -O2 -o wasm-out/spectre_sync_bg.wasm wasm-out/spectre_sync_bg.wasm && cd ../.. && cp crates/spectre-sync/wasm-out/spectre_sync.js crates/spectre-sync/wasm-out/spectre_sync.d.ts crates/spectre-sync/wasm-out/spectre_sync_bg.wasm src/lib/spike/"
   },
   "dependencies": {
+    "@effect/platform-browser": "^4.0.0-rc.109",
     "@kobalte/core": "^2.0.0-alpha.0",
     "@solidjs/router": "^2.0.0-next.16",
     "@solidjs/web": "^2.0.0-rc.0",
     "@stablelib/scrypt": "^2.0.1",
     "@zxing/browser": "^0.2.1",
     "@zxing/library": "^0.23.0",
-    "effect": "^4.0.0-beta.107",
+    "effect": "^4.0.0-rc.109",
+    "fuse.js": "^7.5.0",
     "jsqr": "^1.4.0",
     "solid-js": "^2.0.0-rc.0",
     "uqr": "^0.1.3"

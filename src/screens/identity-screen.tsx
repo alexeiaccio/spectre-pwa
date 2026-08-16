@@ -7,6 +7,7 @@ import {
   For,
   Show,
 } from 'solid-js'
+import Fuse from 'fuse.js'
 import {
   Accent,
   Button,
@@ -65,6 +66,26 @@ export default function IdentityScreen() {
   })
   const [newSite, setNewSite] = createSignal<SiteFormState>({
     ...NEW_SITE_DRAFT,
+  })
+  // Site search (fuzzy) + the empty-state add toggle.
+  const [query, setQuery] = createSignal('')
+  const [addOpen, setAddOpen] = createSignal(false)
+
+  const allSites = createMemo(() => identity()?.sites ?? [])
+  const fuse = createMemo(
+    () =>
+      new Fuse(allSites(), {
+        keys: ['name'],
+        threshold: 0.4,
+        ignoreLocation: true,
+      }),
+  )
+  const filteredSites = createMemo(() => {
+    const q = query().trim()
+    if (!q) return allSites()
+    return fuse()
+      .search(q)
+      .map((r) => r.item)
   })
 
   let copyTimer: number | null = null
@@ -302,98 +323,124 @@ export default function IdentityScreen() {
         }
       >
         <div class="flex flex-col gap-2">
-          <Hint>
-            Tap a site to reveal it; tap the value to copy (auto-clears after
-            30s).
-          </Hint>
-          <For each={identity()?.sites ?? []}>
-            {(site) => {
-              const revealed = createMemo(() => recent()?.site.id === site.id)
-              return (
-                <div class="rounded border border-surface-700 bg-surface-800 hover:border-teal-spectre">
-                  <button
-                    class="flex min-h-11 w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm text-slate-100"
-                    onClick={() => void onDerive(site)}
-                  >
-                    <span class="min-w-0 flex-1">
-                      <span class="block truncate">{site.name}</span>
-                      {site.purpose === 'answer' && site.answer ? (
-                        <span class="block truncate text-xs text-slate-500">
-                          {site.answer}
-                        </span>
-                      ) : null}
-                    </span>
-                    <span class="shrink-0 text-xs text-slate-500">
-                      {derivingId() === site.id
-                        ? 'Deriving…'
-                        : `${PURPOSE_LABEL[site.purpose]} · #${site.counter}`}
-                    </span>
-                  </button>
-                  <Show when={revealed() && recent()}>
-                    {(r) => (
-                      <button
-                        class="flex min-h-11 w-full items-center justify-between gap-2 border-t border-surface-700 px-3 py-2 text-left"
-                        aria-label={`Copy ${site.name} value`}
-                        onClick={() => onCopy(r().site.id, r().value)}
-                      >
-                        <span class="font-mono text-sm break-all text-teal-spectre">
-                          {r().value}
-                        </span>
-                        <span class="shrink-0 text-xs text-slate-500">
-                          {copiedId() === r().site.id
-                            ? 'copied'
-                            : 'tap to copy'}
-                        </span>
-                      </button>
-                    )}
-                  </Show>
-                  <Show when={editingId() === site.id}>
-                    <form
-                      class="flex flex-col gap-2 border-t border-surface-700 p-3"
-                      onSubmit={(e) => {
-                        e.preventDefault()
-                        void onUpdateSite(site)
-                      }}
-                    >
-                      <SiteFields
-                        draft={editDraft()}
-                        setDraft={setEditDraft}
-                        namePlaceholder="site name"
-                      />
-                      <div class="flex gap-2">
-                        <Button variant="primary" type="submit">
-                          Save
-                        </Button>
-                        <Button
-                          variant="secondary"
-                          type="button"
-                          onClick={onCancelEdit}
-                        >
-                          Cancel
-                        </Button>
-                        <button
-                          class="ml-auto tap rounded border border-red-900 px-3 py-1 text-xs text-red-400 hover:text-red-300"
-                          type="button"
-                          onClick={() => void onDeleteSite(site)}
-                        >
-                          Delete site
-                        </button>
-                      </div>
-                    </form>
-                  </Show>
-                  <Show when={editingId() !== site.id}>
+          <Show when={allSites().length > 0}>
+            <Input
+              value={query()}
+              onInput={(e) => setQuery((e.target as HTMLInputElement).value)}
+              placeholder="search sites"
+              title="Search sites"
+              class="mb-1"
+            />
+          </Show>
+          <Show when={allSites().length === 0 && !addOpen()}>
+            <button
+              class="flex tap flex-col items-center gap-1 rounded border border-dashed border-surface-700 px-3 py-8 text-slate-500 hover:border-teal-spectre hover:text-slate-300"
+              type="button"
+              onClick={() => setAddOpen(true)}
+            >
+              <span class="text-3xl leading-none">＋</span>
+              <span class="text-sm">Add a site</span>
+            </button>
+          </Show>
+          <Show when={allSites().length > 0}>
+            <Hint>
+              Tap a site to reveal it; tap the value to copy (auto-clears after
+              30s).
+            </Hint>
+            <For each={filteredSites()}>
+              {(site) => {
+                const revealed = createMemo(() => recent()?.site.id === site.id)
+                return (
+                  <div class="rounded border border-surface-700 bg-surface-800 hover:border-teal-spectre">
                     <button
-                      class="block w-full rounded-b border-t border-surface-700 px-3 py-1 text-left text-xs text-slate-500 hover:text-slate-300"
-                      onClick={() => onStartEdit(site)}
+                      class="flex min-h-11 w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm text-slate-100"
+                      onClick={() => void onDerive(site)}
                     >
-                      edit
+                      <span class="min-w-0 flex-1">
+                        <span class="block truncate">{site.name}</span>
+                        {site.purpose === 'answer' && site.answer ? (
+                          <span class="block truncate text-xs text-slate-500">
+                            {site.answer}
+                          </span>
+                        ) : null}
+                      </span>
+                      <span class="shrink-0 text-xs text-slate-500">
+                        {derivingId() === site.id
+                          ? 'Deriving…'
+                          : `${PURPOSE_LABEL[site.purpose]} · #${site.counter}`}
+                      </span>
                     </button>
-                  </Show>
-                </div>
-              )
-            }}
-          </For>
-          {addSiteBlock()}
+                    <Show when={revealed() && recent()}>
+                      {(r) => (
+                        <button
+                          class="flex min-h-11 w-full items-center justify-between gap-2 border-t border-surface-700 px-3 py-2 text-left"
+                          aria-label={`Copy ${site.name} value`}
+                          onClick={() => onCopy(r().site.id, r().value)}
+                        >
+                          <span class="font-mono text-sm break-all text-teal-spectre">
+                            {r().value}
+                          </span>
+                          <span class="shrink-0 text-xs text-slate-500">
+                            {copiedId() === r().site.id
+                              ? 'copied'
+                              : 'tap to copy'}
+                          </span>
+                        </button>
+                      )}
+                    </Show>
+                    <Show when={editingId() === site.id}>
+                      <form
+                        class="flex flex-col gap-2 border-t border-surface-700 p-3"
+                        onSubmit={(e) => {
+                          e.preventDefault()
+                          void onUpdateSite(site)
+                        }}
+                      >
+                        <SiteFields
+                          draft={editDraft()}
+                          setDraft={setEditDraft}
+                          namePlaceholder="site name"
+                        />
+                        <div class="flex gap-2">
+                          <Button variant="primary" type="submit">
+                            Save
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            type="button"
+                            onClick={onCancelEdit}
+                          >
+                            Cancel
+                          </Button>
+                          <button
+                            class="ml-auto tap rounded border border-red-900 px-3 py-1 text-xs text-red-400 hover:text-red-300"
+                            type="button"
+                            onClick={() => void onDeleteSite(site)}
+                          >
+                            Delete site
+                          </button>
+                        </div>
+                      </form>
+                    </Show>
+                    <Show when={editingId() !== site.id}>
+                      <button
+                        class="block w-full rounded-b border-t border-surface-700 px-3 py-1 text-left text-xs text-slate-500 hover:text-slate-300"
+                        onClick={() => onStartEdit(site)}
+                      >
+                        edit
+                      </button>
+                    </Show>
+                  </div>
+                )
+              }}
+            </For>
+            <Show when={query().trim() && filteredSites().length === 0}>
+              <Hint>No sites match “{query().trim()}”.</Hint>
+            </Show>
+          </Show>
+          <Show when={allSites().length === 0 ? addOpen() : true}>
+            {addSiteBlock()}
+          </Show>
         </div>
       </Show>
     </div>
