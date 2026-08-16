@@ -43,6 +43,10 @@ export interface SyncAdapter {
   syncStatus(docId: string): Promise<string>
   /** Home relay connection status (diagnostics). */
   relayStatus(): Promise<string>
+  /** Peers currently syncing a doc (diagnostics, spike-style). */
+  syncPeers(docId: string): Promise<string>
+  /** This node's public id (diagnostics). */
+  nodeId(): Promise<string>
 }
 
 function createWasmSyncAdapter(): SyncAdapter {
@@ -127,6 +131,14 @@ function createWasmSyncAdapter(): SyncAdapter {
     relayStatus: async () => {
       const n = await ensure()
       return n.relay_status()
+    },
+    syncPeers: async (docId) => {
+      const n = await ensure()
+      return n.sync_peers(docId)
+    },
+    nodeId: async () => {
+      const n = await ensure()
+      return n.node_id()
     },
   }
 }

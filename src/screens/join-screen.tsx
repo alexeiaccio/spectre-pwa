@@ -80,7 +80,7 @@ export default function JoinScreen() {
   const [localCode, setLocalCode] = createSignal('')
   const [error, setError] = createSignal<string | null>(null)
   const [busy, setBusy] = createSignal(false)
-  const [relay, setRelay] = createSignal<string | null>(null)
+  const [diag, setDiag] = createSignal<string[]>([])
 
   // A device that already has a vault joins by adopting the host's code.
   const existingVault = (): boolean =>
@@ -115,7 +115,7 @@ export default function JoinScreen() {
 
   const startJoin = async (): Promise<void> => {
     setError(null)
-    setRelay(null)
+    setDiag([])
     if (!ticket().trim()) return
     setBusy(true)
     setStep('syncing')
@@ -176,8 +176,8 @@ export default function JoinScreen() {
     }
   }
 
-  // While syncing, poll the relay connection status so "no connection" is
-  // diagnosable: the syncing step shows "Relay: <status>".
+  // While syncing, poll connection diagnostics (spike-style): relay, doc sync
+  // status, peers, node id — so "no connection" is diagnosable on the screen.
   createEffect(
     () => step() === 'syncing',
     (syncing) => {
@@ -185,7 +185,20 @@ export default function JoinScreen() {
       const timer = window.setInterval(() => {
         const s = sync
         if (!s) return
-        void s.relayStatus().then(setRelay).catch(() => {})
+        void (async () => {
+          try {
+            const lines: string[] = []
+            lines.push(`relay: ${await s.relayStatus()}`)
+            lines.push(`node: ${await s.nodeId()}`)
+            if (docId) {
+              lines.push(`sync: ${await s.syncStatus(docId)}`)
+              lines.push(`peers: ${await s.syncPeers(docId)}`)
+            }
+            setDiag(lines)
+          } catch {
+            // wasm busy — skip this tick
+          }
+        })()
       }, 2000)
       onCleanup(() => window.clearInterval(timer))
     },
@@ -465,8 +478,10 @@ export default function JoinScreen() {
         <Accent>
           {busy() ? 'Connecting to the other device…' : 'Waiting for the host…'}
         </Accent>
-        <Show when={relay()}>
-          <Hint>Relay: {relay()}</Hint>
+        <Show when={diag().length}>
+          <pre class="rounded border border-surface-700 bg-surface-800 p-2 text-xs text-slate-400">
+            {diag().join('\n')}
+          </pre>
         </Show>
         <Button variant="primary" onClick={() => void startJoin()}>
           Retry

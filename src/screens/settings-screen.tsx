@@ -1,4 +1,4 @@
-import { createSignal, Show } from 'solid-js'
+import { createEffect, createSignal, onCleanup, Show } from 'solid-js'
 import {
   Button,
   Card,
@@ -43,6 +43,36 @@ export default function SettingsScreen() {
   const [pairing, setPairing] = createSignal(false)
   const [pairError, setPairError] = createSignal<string | null>(null)
   const [copied, setCopied] = createSignal(false)
+  const [diag, setDiag] = createSignal<string[]>([])
+
+  // While the invitation is shown, poll spike-style connection diagnostics
+  // (relay / node / doc sync) so the host can see its sync state.
+  createEffect(
+    () => invitation(),
+    (inv) => {
+      if (!inv) {
+        setDiag([])
+        return
+      }
+      const timer = window.setInterval(() => {
+        const s = getSyncAdapter()
+        void (async () => {
+          try {
+            const docId = s.docIdFromTicket(inv)
+            const lines: string[] = []
+            lines.push(`relay: ${await s.relayStatus()}`)
+            lines.push(`node: ${await s.nodeId()}`)
+            lines.push(`sync: ${await s.syncStatus(docId)}`)
+            lines.push(`peers: ${await s.syncPeers(docId)}`)
+            setDiag(lines)
+          } catch {
+            // node not up yet — skip this tick
+          }
+        })()
+      }, 3000)
+      onCleanup(() => window.clearInterval(timer))
+    },
+  )
 
   // Live identicon while the identity (full name + secret) is being generated.
   const identicon = useIdenticon(
@@ -210,6 +240,11 @@ export default function SettingsScreen() {
             class="h-auto w-full max-w-sm self-center text-surface-950"
           />
           <p class="text-xs break-all text-slate-400">{invitation()}</p>
+          <Show when={diag().length}>
+            <pre class="rounded border border-surface-700 bg-surface-800 p-2 text-xs text-slate-400">
+              {diag().join('\n')}
+            </pre>
+          </Show>
           <div class="flex items-center gap-2">
             <Button variant="secondary" onClick={onCopyInvitation}>
               {copied() ? 'copied' : 'Copy invitation'}
