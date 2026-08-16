@@ -51,11 +51,18 @@ impl SyncNode {
     }
 
     async fn start_inner(secret_key: Option<SecretKey>) -> Result<SyncNode, JsError> {
-        let mut builder = Endpoint::builder(presets::N0).alpns(vec![
-            iroh_blobs::ALPN.to_vec(),
-            iroh_gossip::ALPN.to_vec(),
-            iroh_docs::ALPN.to_vec(),
-        ]);
+        let mut builder = Endpoint::builder(presets::N0)
+            .alpns(vec![
+                iroh_blobs::ALPN.to_vec(),
+                iroh_gossip::ALPN.to_vec(),
+                iroh_docs::ALPN.to_vec(),
+            ])
+            // The n0 pkarr DNS server's CORS config rejects browser PUTs
+            // (no access-control-allow-headers), so the PkarrPublisher can
+            // never publish from wasm; the resolver adds a flaky HTTP hop to
+            // the engine's dial. Tickets carry relay addresses, which seed
+            // the endpoint's memory lookup — drop pkarr entirely (M10).
+            .clear_address_lookup();
         if let Some(sk) = secret_key {
             builder = builder.secret_key(sk);
         }
