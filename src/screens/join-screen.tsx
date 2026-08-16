@@ -176,12 +176,18 @@ export default function JoinScreen() {
     }
   }
 
-  // While syncing, poll connection diagnostics (spike-style): relay, doc sync
-  // status, peers, node id — so "no connection" is diagnosable on the screen.
+  // Poll iroh connection diagnostics (spike-style) while on the invite or
+  // syncing step: relay / node / doc sync / peers. Pre-warms the node (wasm +
+  // relay dial) so the connection info shows before joining and the join is
+  // fast.
   createEffect(
-    () => step() === 'syncing',
-    (syncing) => {
-      if (!syncing) return
+    () => step() === 'invite' || step() === 'syncing',
+    (active) => {
+      if (!active) {
+        setDiag([])
+        return
+      }
+      void getSyncAdapter().start().catch(() => {})
       const timer = window.setInterval(() => {
         const s = sync
         if (!s) return
@@ -472,6 +478,11 @@ export default function JoinScreen() {
               Join
             </Button>
           </form>
+        </Show>
+        <Show when={diag().length}>
+          <pre class="rounded border border-surface-700 bg-surface-800 p-2 text-xs text-slate-400">
+            {diag().join('\n')}
+          </pre>
         </Show>
       </Show>
 
