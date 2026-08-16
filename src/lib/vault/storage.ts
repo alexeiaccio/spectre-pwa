@@ -1,4 +1,11 @@
-import { Effect, Schema } from 'effect'
+import { Effect, Layer, Schema } from 'effect'
+import {
+  IndexedDb,
+  IndexedDbDatabase,
+  IndexedDbQueryBuilder,
+  IndexedDbTable,
+  IndexedDbVersion,
+} from '@effect/platform-browser'
 import type { SyncRecord } from '../sync/types.ts'
 import {
   DB_NAME,
@@ -13,206 +20,424 @@ import {
   type Prefs,
 } from './schema.ts'
 
-class VaultStorageError extends Schema.TaggedError<VaultStorageError>()(
-  'VaultStorageError',
-  { message: Schema.String },
-) {}
+const Buf = Schema.instanceOf(ArrayBuffer)
 
-const open = (): Effect.Effect<IDBDatabase, VaultStorageError> =>
-  Effect.callback<IDBDatabase, VaultStorageError>((resume) => {
-    const req = indexedDB.open(DB_NAME, 3)
-    req.onupgradeneeded = () => {
-      const db = req.result
-      for (const store of [
-        ENVELOPE_STORE,
+const WrappedDeKSchema = Schema.Struct({
+  method: Schema.Union([Schema.Literal('passkey'), Schema.Literal('recovery')]),
+  salt: Buf,
+  prfSalt: Schema.optional(Buf),
+  credId: Schema.optional(Schema.String),
+  iv: Buf,
+  wrapped: Buf,
+})
+
+// --- v4 rows: the out-of-line key moved into the row (`keyPath: 'key'`) so the
+// typed query builder can target single rows with `equals`. ---
+
+const EnvelopeSchema = Schema.Struct({
+  key: Schema.String,
+  version: Schema.Int,
+  deks: Schema.Array(WrappedDeKSchema),
+})
+
+const PrefsSchema = Schema.Struct({
+  key: Schema.Literal('root'),
+  theme: Schema.Literal('dark'),
+  autoLockMinutes: Schema.Int,
+})
+
+const NodeSchema = Schema.Struct({
+  key: Schema.Literal('node'),
+  secretKey: Schema.String,
+  docTicket: Schema.optional(Schema.String),
+  docId: Schema.optional(Schema.String),
+  authorKey: Schema.optional(Schema.String),
+})
+
+const MetaSchema = Schema.Struct({
+  key: Schema.Literal('state'),
+  deviceId: Schema.String,
+})
+
+/**
+ * `SyncRecord` is a union, and an `IndexedDbTable` needs a flat struct, so the
+ * union is stored flattened: a `record` row carries `writer`/`iv`/`ct`, a
+ * `tombstone` row only the discriminator fields.
+ */
+const RecordsSchema = Schema.Struct({
+  key: Schema.String,
+  v: Schema.Literal(2),
+  kind: Schema.Union([Schema.Literal('record'), Schema.Literal('tombstone')]),
+  writer: Schema.optional(Schema.String),
+  iv: Schema.optional(Buf),
+  ct: Schema.optional(Buf),
+})
+
+type RecordsRow = Schema.Schema.Type<typeof RecordsSchema>
+
+const recordToRow = (identityId: string, record: SyncRecord): RecordsRow =>
+  record.kind === 'tombstone'
+    ? { key: identityId, v: 2, kind: 'tombstone' }
+    : {
+        key: identityId,
+        v: 2,
+        kind: 'record',
+        writer: record.writer,
+        iv: record.iv,
+        ct: record.ct,
+      }
+
+const rowToRecord = (row: RecordsRow): SyncRecord => {
+  if (row.kind === 'tombstone') return { v: 2, kind: 'tombstone' }
+  if (
+    row.writer === undefined ||
+    row.iv === undefined ||
+    row.ct === undefined
+  ) {
+    throw new Error('corrupt record row')
+  }
+  return { v: 2, kind: 'record', writer: row.writer, iv: row.iv, ct: row.ct }
+}
+
+// --- v1–v3 rows: no in-row key, the key was passed out-of-line to `put`. ---
+
+const EnvelopeSchemaV1 = Schema.Struct({
+  version: Schema.Int,
+  deks: Schema.Array(WrappedDeKSchema),
+})
+
+const PrefsSchemaV1 = Schema.Struct({
+  theme: Schema.Literal('dark'),
+  autoLockMinutes: Schema.Int,
+})
+
+const NodeSchemaV1 = Schema.Struct({
+  secretKey: Schema.String,
+  docTicket: Schema.optional(Schema.String),
+  docId: Schema.optional(Schema.String),
+  authorKey: Schema.optional(Schema.String),
+})
+
+const MetaSchemaV1 = Schema.Struct({
+  deviceId: Schema.String,
+})
+
+const RecordsSchemaV1 = Schema.Struct({
+  v: Schema.Literal(2),
+  kind: Schema.Union([Schema.Literal('record'), Schema.Literal('tombstone')]),
+  writer: Schema.optional(Schema.String),
+  iv: Schema.optional(Buf),
+  ct: Schema.optional(Buf),
+})
+
+const PrefsTableV1 = IndexedDbTable.make({
+  name: PREFS_STORE,
+  schema: PrefsSchemaV1,
+})
+const RecordsTableV1 = IndexedDbTable.make({
+  name: RECORDS_STORE,
+  schema: RecordsSchemaV1,
+})
+const EnvelopeTableV1 = IndexedDbTable.make({
+  name: ENVELOPE_STORE,
+  schema: EnvelopeSchemaV1,
+})
+const NodeTableV1 = IndexedDbTable.make({
+  name: NODE_STORE,
+  schema: NodeSchemaV1,
+})
+const MetaTableV1 = IndexedDbTable.make({
+  name: META_STORE,
+  schema: MetaSchemaV1,
+})
+
+const PrefsTable = IndexedDbTable.make({
+  name: PREFS_STORE,
+  schema: PrefsSchema,
+  keyPath: 'key',
+})
+const RecordsTable = IndexedDbTable.make({
+  name: RECORDS_STORE,
+  schema: RecordsSchema,
+  keyPath: 'key',
+})
+const EnvelopeTable = IndexedDbTable.make({
+  name: ENVELOPE_STORE,
+  schema: EnvelopeSchema,
+  keyPath: 'key',
+})
+const NodeTable = IndexedDbTable.make({
+  name: NODE_STORE,
+  schema: NodeSchema,
+  keyPath: 'key',
+})
+const MetaTable = IndexedDbTable.make({
+  name: META_STORE,
+  schema: MetaSchema,
+  keyPath: 'key',
+})
+
+/**
+ * Version chain: v1–v3 are the historical DB (5 out-of-line-key stores) — the
+ * chain must be at least 4 long so DBs created by older builds (currently at
+ * version 3) run the v4 migration instead of failing the open. v4 deletes and
+ * recreates each store with `keyPath: 'key'`, copying the rows over.
+ */
+const V1 = IndexedDbVersion.make(
+  PrefsTableV1,
+  RecordsTableV1,
+  EnvelopeTableV1,
+  NodeTableV1,
+  MetaTableV1,
+)
+const V2 = IndexedDbVersion.make(
+  PrefsTableV1,
+  RecordsTableV1,
+  EnvelopeTableV1,
+  NodeTableV1,
+  MetaTableV1,
+)
+const V3 = IndexedDbVersion.make(
+  PrefsTableV1,
+  RecordsTableV1,
+  EnvelopeTableV1,
+  NodeTableV1,
+  MetaTableV1,
+)
+const V4 = IndexedDbVersion.make(
+  PrefsTable,
+  RecordsTable,
+  EnvelopeTable,
+  NodeTable,
+  MetaTable,
+)
+
+const SpectreDb = IndexedDbDatabase.make(
+  V1,
+  Effect.fn('vault.storage.initV1')(function* (api): Effect.fn.Return<
+    void,
+    IndexedDbDatabase.IndexedDbDatabaseError
+  > {
+    yield* api.createObjectStore(PREFS_STORE)
+    yield* api.createObjectStore(RECORDS_STORE)
+    yield* api.createObjectStore(ENVELOPE_STORE)
+    yield* api.createObjectStore(NODE_STORE)
+    yield* api.createObjectStore(META_STORE)
+  }),
+)
+  .add(
+    V2,
+    Effect.fn('vault.storage.v2')(() => Effect.void),
+  )
+  .add(
+    V3,
+    Effect.fn('vault.storage.v3')(() => Effect.void),
+  )
+  .add(
+    V4,
+    Effect.fn('vault.storage.v4KeyPath')(function* (
+      from: IndexedDbDatabase.Transaction<any>,
+      to: IndexedDbDatabase.Transaction<any>,
+    ): Effect.fn.Return<
+      void,
+      | IndexedDbQueryBuilder.IndexedDbQueryError
+      | IndexedDbDatabase.IndexedDbDatabaseError
+    > {
+      for (const name of [
         PREFS_STORE,
         RECORDS_STORE,
+        ENVELOPE_STORE,
         NODE_STORE,
         META_STORE,
-      ]) {
-        if (!db.objectStoreNames.contains(store)) {
-          db.createObjectStore(store)
-        }
+      ] as const) {
+        const rows = yield* from.from(name).select()
+        yield* from.deleteObjectStore(name)
+        yield* to.createObjectStore(name)
+        yield* to.from(name).upsertAll(rows)
       }
-    }
-    req.addEventListener('success', () => resume(Effect.succeed(req.result)))
-    req.addEventListener('error', () =>
-      resume(Effect.fail(new VaultStorageError({ message: 'open failed' }))),
-    )
-  })
-
-function idb<T>(
-  op: (db: IDBDatabase) => IDBRequest<T>,
-): Effect.Effect<T, VaultStorageError> {
-  return Effect.flatMap(open(), (db) =>
-    Effect.callback<T, VaultStorageError>((resume) => {
-      const req = op(db)
-      req.addEventListener('success', () => {
-        db.close()
-        resume(Effect.succeed(req.result))
-      })
-      req.addEventListener('error', () => {
-        db.close()
-        resume(
-          Effect.fail(new VaultStorageError({ message: 'request failed' })),
-        )
-      })
     }),
   )
-}
 
-/** Run a readwrite transaction over several stores; resolves on `complete`. */
-function idbTx(
-  stores: string[],
-  run: (tx: IDBTransaction) => void,
-): Effect.Effect<void, VaultStorageError> {
-  return Effect.flatMap(open(), (db) =>
-    Effect.callback<void, VaultStorageError>((resume) => {
-      const tx = db.transaction(stores, 'readwrite')
-      run(tx)
-      tx.addEventListener('complete', () => {
-        db.close()
-        resume(Effect.void)
-      })
-      tx.addEventListener('error', () => {
-        db.close()
-        resume(
-          Effect.fail(new VaultStorageError({ message: 'transaction failed' })),
-        )
-      })
-      tx.addEventListener('abort', () => {
-        db.close()
-        resume(
-          Effect.fail(
-            new VaultStorageError({ message: 'transaction aborted' }),
-          ),
-        )
-      })
-    }),
-  )
-}
+type QueryBuilder = Effect.Success<typeof SpectreDb.getQueryBuilder>
 
-export const readPrefs = (): Effect.Effect<
-  Prefs | undefined,
-  VaultStorageError
+/** The composed DB layer: opens `spectre-pocket` from `window.indexedDB`. */
+const VaultDbLayer = Layer.provide(
+  SpectreDb.layer(DB_NAME),
+  IndexedDb.layerWindow,
+)
+
+const withDb = <A, E>(
+  use: (qb: QueryBuilder) => Effect.Effect<A, E>,
+): Effect.Effect<
+  A,
+  | E
+  | IndexedDbQueryBuilder.IndexedDbQueryError
+  | IndexedDbDatabase.IndexedDbDatabaseError
 > =>
-  idb((db) =>
-    db
-      .transaction(PREFS_STORE, 'readonly')
-      .objectStore(PREFS_STORE)
-      .get('root'),
+  Effect.gen(function* () {
+    const qb = yield* SpectreDb.getQueryBuilder
+    return yield* use(qb)
+  }).pipe(
+    // `local: true` — one connection per operation, matching the previous
+    // open-per-call behaviour of this module (the browser tests drop the whole
+    // DB between cases, which requires no lingering connection).
+    // oxlint-disable-next-line effecttsgo/strict-effect-provide
+    Effect.provide(VaultDbLayer, { local: true }),
   )
 
-export const writePrefs = (
+export const readPrefs = Effect.fn('vault.storage.readPrefs')(
+  function* (): Effect.fn.Return<
+    Prefs | undefined,
+    | IndexedDbQueryBuilder.IndexedDbQueryError
+    | IndexedDbDatabase.IndexedDbDatabaseError
+  > {
+    const rows = yield* withDb((qb) =>
+      qb.from(PREFS_STORE).select().equals('root'),
+    )
+    const row = rows[0]
+    return row
+      ? { theme: row.theme, autoLockMinutes: row.autoLockMinutes }
+      : undefined
+  },
+)
+
+export const writePrefs = Effect.fn('vault.storage.writePrefs')(function* (
   prefs: Prefs,
-): Effect.Effect<void, VaultStorageError> =>
-  idb((db) =>
-    db
-      .transaction(PREFS_STORE, 'readwrite')
-      .objectStore(PREFS_STORE)
-      .put(prefs, 'root'),
-  ).pipe(Effect.as(undefined))
+): Effect.fn.Return<
+  void,
+  | IndexedDbQueryBuilder.IndexedDbQueryError
+  | IndexedDbDatabase.IndexedDbDatabaseError
+> {
+  yield* withDb((qb) => qb.from(PREFS_STORE).upsert({ key: 'root', ...prefs }))
+})
 
 // --- v3 mirror helpers ---
 
-export const writeRecord = (
+export const writeRecord = Effect.fn('vault.storage.writeRecord')(function* (
   identityId: string,
   record: SyncRecord,
-): Effect.Effect<void, VaultStorageError> =>
-  idbTx([RECORDS_STORE], (tx) => {
-    tx.objectStore(RECORDS_STORE).put(record, identityId)
-  })
+): Effect.fn.Return<
+  void,
+  | IndexedDbQueryBuilder.IndexedDbQueryError
+  | IndexedDbDatabase.IndexedDbDatabaseError
+> {
+  yield* withDb((qb) =>
+    qb.from(RECORDS_STORE).upsert(recordToRow(identityId, record)),
+  )
+})
 
-export const writeRecords = (
+export const writeRecords = Effect.fn('vault.storage.writeRecords')(function* (
   entries: Iterable<readonly [string, SyncRecord]>,
-): Effect.Effect<void, VaultStorageError> =>
-  idbTx([RECORDS_STORE], (tx) => {
-    const store = tx.objectStore(RECORDS_STORE)
-    for (const [id, record] of entries) store.put(record, id)
-  })
+): Effect.fn.Return<
+  void,
+  | IndexedDbQueryBuilder.IndexedDbQueryError
+  | IndexedDbDatabase.IndexedDbDatabaseError
+> {
+  const rows = Array.from(entries, ([id, record]) => recordToRow(id, record))
+  yield* withDb((qb) => qb.from(RECORDS_STORE).upsertAll(rows))
+})
 
-export const getAllRecords = (): Effect.Effect<
-  Array<readonly [string, SyncRecord]>,
-  VaultStorageError
-> =>
-  Effect.flatMap(open(), (db) =>
-    Effect.callback<Array<readonly [string, SyncRecord]>, VaultStorageError>(
-      (resume) => {
-        const store = db
-          .transaction(RECORDS_STORE, 'readonly')
-          .objectStore(RECORDS_STORE)
-        const keysReq = store.getAllKeys()
-        const valsReq = store.getAll()
-        let keys: IDBValidKey[] = []
-        let vals: SyncRecord[] = []
-        const done = (): void => {
-          db.close()
-          resume(
-            Effect.succeed(
-              keys.map(
-                (k, i) => [String(k), vals[i]] as readonly [string, SyncRecord],
-              ),
-            ),
-          )
-        }
-        keysReq.addEventListener('success', () => {
-          keys = keysReq.result
-          if (keysReq.readyState === 'done' && valsReq.readyState === 'done')
-            done()
-        })
-        valsReq.addEventListener('success', () => {
-          vals = valsReq.result as SyncRecord[]
-          if (keysReq.readyState === 'done' && valsReq.readyState === 'done')
-            done()
-        })
-      },
-    ),
-  )
+export const getAllRecords = Effect.fn('vault.storage.getAllRecords')(
+  function* (): Effect.fn.Return<
+    Array<readonly [string, SyncRecord]>,
+    | IndexedDbQueryBuilder.IndexedDbQueryError
+    | IndexedDbDatabase.IndexedDbDatabaseError
+  > {
+    const rows = yield* withDb((qb) => qb.from(RECORDS_STORE).select())
+    return rows.map((row) => [row.key, rowToRecord(row)] as const)
+  },
+)
 
-export const readDeviceEnvelope = (
-  deviceId: string,
-): Effect.Effect<Envelope | undefined, VaultStorageError> =>
-  idb((db) =>
-    db
-      .transaction(ENVELOPE_STORE, 'readonly')
-      .objectStore(ENVELOPE_STORE)
-      .get(deviceId),
-  )
+export const readDeviceEnvelope = Effect.fn('vault.storage.readDeviceEnvelope')(
+  function* (
+    deviceId: string,
+  ): Effect.fn.Return<
+    Envelope | undefined,
+    | IndexedDbQueryBuilder.IndexedDbQueryError
+    | IndexedDbDatabase.IndexedDbDatabaseError
+  > {
+    const rows = yield* withDb((qb) =>
+      qb.from(ENVELOPE_STORE).select().equals(deviceId),
+    )
+    const row = rows[0]
+    return row ? { version: row.version, deks: row.deks } : undefined
+  },
+)
 
-export const writeDeviceEnvelope = (
+export const writeDeviceEnvelope = Effect.fn(
+  'vault.storage.writeDeviceEnvelope',
+)(function* (
   deviceId: string,
   envelope: Envelope,
-): Effect.Effect<void, VaultStorageError> =>
-  idbTx([ENVELOPE_STORE], (tx) => {
-    tx.objectStore(ENVELOPE_STORE).put(envelope, deviceId)
-  })
-
-export const readMeta = (): Effect.Effect<
-  MetaState | undefined,
-  VaultStorageError
-> =>
-  idb((db) =>
-    db.transaction(META_STORE, 'readonly').objectStore(META_STORE).get('state'),
+): Effect.fn.Return<
+  void,
+  | IndexedDbQueryBuilder.IndexedDbQueryError
+  | IndexedDbDatabase.IndexedDbDatabaseError
+> {
+  yield* withDb((qb) =>
+    qb.from(ENVELOPE_STORE).upsert({
+      key: deviceId,
+      version: envelope.version,
+      deks: envelope.deks,
+    }),
   )
+})
 
-export const writeMeta = (
+export const readMeta = Effect.fn('vault.storage.readMeta')(
+  function* (): Effect.fn.Return<
+    MetaState | undefined,
+    | IndexedDbQueryBuilder.IndexedDbQueryError
+    | IndexedDbDatabase.IndexedDbDatabaseError
+  > {
+    const rows = yield* withDb((qb) =>
+      qb.from(META_STORE).select().equals('state'),
+    )
+    const row = rows[0]
+    return row ? { deviceId: row.deviceId } : undefined
+  },
+)
+
+export const writeMeta = Effect.fn('vault.storage.writeMeta')(function* (
   meta: MetaState,
-): Effect.Effect<void, VaultStorageError> =>
-  idbTx([META_STORE], (tx) => {
-    tx.objectStore(META_STORE).put(meta, 'state')
-  })
-
-export const readNodeIdentity = (): Effect.Effect<
-  NodeIdentity | undefined,
-  VaultStorageError
-> =>
-  idb((db) =>
-    db.transaction(NODE_STORE, 'readonly').objectStore(NODE_STORE).get('node'),
+): Effect.fn.Return<
+  void,
+  | IndexedDbQueryBuilder.IndexedDbQueryError
+  | IndexedDbDatabase.IndexedDbDatabaseError
+> {
+  yield* withDb((qb) =>
+    qb.from(META_STORE).upsert({ key: 'state', deviceId: meta.deviceId }),
   )
+})
 
-export const writeNodeIdentity = (
-  node: NodeIdentity,
-): Effect.Effect<void, VaultStorageError> =>
-  idbTx([NODE_STORE], (tx) => {
-    tx.objectStore(NODE_STORE).put(node, 'node')
-  })
+export const readNodeIdentity = Effect.fn('vault.storage.readNodeIdentity')(
+  function* (): Effect.fn.Return<
+    NodeIdentity | undefined,
+    | IndexedDbQueryBuilder.IndexedDbQueryError
+    | IndexedDbDatabase.IndexedDbDatabaseError
+  > {
+    const rows = yield* withDb((qb) =>
+      qb.from(NODE_STORE).select().equals('node'),
+    )
+    const row = rows[0]
+    return row
+      ? {
+          secretKey: row.secretKey,
+          docTicket: row.docTicket,
+          docId: row.docId,
+          authorKey: row.authorKey,
+        }
+      : undefined
+  },
+)
+
+export const writeNodeIdentity = Effect.fn('vault.storage.writeNodeIdentity')(
+  function* (
+    node: NodeIdentity,
+  ): Effect.fn.Return<
+    void,
+    | IndexedDbQueryBuilder.IndexedDbQueryError
+    | IndexedDbDatabase.IndexedDbDatabaseError
+  > {
+    yield* withDb((qb) => qb.from(NODE_STORE).upsert({ key: 'node', ...node }))
+  },
+)

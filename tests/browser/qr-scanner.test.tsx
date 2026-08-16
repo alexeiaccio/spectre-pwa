@@ -60,7 +60,9 @@ test('Scan QR requests the camera and does not hang on "Starting camera…"', as
 
   const gum = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices)
   const calls: string[] = []
-  navigator.mediaDevices.getUserMedia = (async (constraints: MediaStreamConstraints) => {
+  navigator.mediaDevices.getUserMedia = (async (
+    constraints: MediaStreamConstraints,
+  ) => {
     calls.push(JSON.stringify(constraints))
     try {
       const stream = await gum(constraints)
@@ -73,10 +75,7 @@ test('Scan QR requests the camera and does not hang on "Starting camera…"', as
   }) as typeof navigator.mediaDevices.getUserMedia
 
   const { container } = render(() => (
-    <App
-      vault={fakeVault({ kind: 'needs-setup' })}
-      session={fakeSession()}
-    />
+    <App vault={fakeVault({ kind: 'needs-setup' })} session={fakeSession()} />
   ))
   const scanBtn = [...container.querySelectorAll('button')].find((b) =>
     b.textContent?.includes('Scan QR'),
@@ -86,7 +85,10 @@ test('Scan QR requests the camera and does not hang on "Starting camera…"', as
 
   await waitFor(
     () => {
-      expect(calls.length, `getUserMedia calls: ${JSON.stringify(calls)}`).toBeGreaterThan(0)
+      expect(
+        calls.length,
+        `getUserMedia calls: ${JSON.stringify(calls)}`,
+      ).toBeGreaterThan(0)
     },
     { timeout: 10_000 },
   )
@@ -94,7 +96,9 @@ test('Scan QR requests the camera and does not hang on "Starting camera…"', as
   await waitFor(
     () => {
       const text = container.textContent ?? ''
-      const scanning = text.includes('Point this device at the invitation QR code')
+      const scanning = text.includes(
+        'Point this device at the invitation QR code',
+      )
       const errored = !!container.querySelector('.text-red-400')
       expect(scanning || errored, `text: ${text.slice(0, 200)}`).toBe(true)
     },

@@ -5,7 +5,9 @@ import { Button } from './button.tsx'
 import { ErrorText, Hint } from './text.tsx'
 
 /** Try zxing then jsQR (with inversion) on a canvas; null if neither reads it. */
-const decodeCanvas = async (canvas: HTMLCanvasElement): Promise<string | null> => {
+const decodeCanvas = async (
+  canvas: HTMLCanvasElement,
+): Promise<string | null> => {
   try {
     const result = new BrowserQRCodeReader().decodeFromCanvas(canvas)
     return result.getText()
@@ -63,7 +65,8 @@ export function QrImagePicker(props: { onScan: (text: string) => void }) {
           if (text) break
         }
         if (text) props.onScan(text)
-        else setError('No QR code found in that image — try a sharper screenshot.')
+        else
+          setError('No QR code found in that image — try a sharper screenshot.')
       } finally {
         URL.revokeObjectURL(url)
       }

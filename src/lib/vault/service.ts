@@ -1,5 +1,9 @@
 import { Context, Effect, Layer, ManagedRuntime, Ref, Schema } from 'effect'
 import {
+  IndexedDbDatabase,
+  IndexedDbQueryBuilder,
+} from '@effect/platform-browser'
+import {
   generateDek,
   kekFromPrf,
   unwrapDek,
@@ -22,7 +26,8 @@ import type { PasskeyError } from './passkey.ts'
 import type { Envelope, Identity, Vault, WrappedDeK } from './schema.ts'
 
 type VaultError =
-  | VaultStorageError
+  | IndexedDbDatabase.IndexedDbDatabaseError
+  | IndexedDbQueryBuilder.IndexedDbQueryError
   | VaultUnlockedError
   | CryptoError
   | PasskeyError
@@ -82,11 +87,6 @@ interface VaultService {
 }
 
 const VaultService = Context.Service<VaultService>('VaultService')
-
-class VaultStorageError extends Schema.TaggedError<VaultStorageError>()(
-  'VaultStorageError',
-  { message: Schema.String },
-) {}
 
 class VaultUnlockedError extends Schema.TaggedError<VaultUnlockedError>()(
   'VaultUnlockedError',

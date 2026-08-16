@@ -61,7 +61,10 @@ afterEach(() => {
 test('unlocked app auto-locks after the inactivity grace with no interaction', async () => {
   vi.useFakeTimers()
   const { container } = render(() => (
-    <App vault={fakeVault({ kind: 'unlocked', vault: VAULT })} session={fakeSession()} />
+    <App
+      vault={fakeVault({ kind: 'unlocked', vault: VAULT })}
+      session={fakeSession()}
+    />
   ))
   await flush() // let the mount effect arm the idle timer
   vi.advanceTimersByTime(2 * 60 * 1000 + 1) // past the 2-minute default grace
@@ -72,7 +75,10 @@ test('unlocked app auto-locks after the inactivity grace with no interaction', a
 test('interaction before the grace resets the idle timer', async () => {
   vi.useFakeTimers()
   const { container } = render(() => (
-    <App vault={fakeVault({ kind: 'unlocked', vault: VAULT })} session={fakeSession()} />
+    <App
+      vault={fakeVault({ kind: 'unlocked', vault: VAULT })}
+      session={fakeSession()}
+    />
   ))
   await flush()
   // interact mid-way through the grace, then advance past it again

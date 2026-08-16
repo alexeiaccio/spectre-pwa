@@ -176,9 +176,9 @@ test('identities: identicon placeholder stays hidden until name + passphrase yie
       session={fakeSession()}
     />
   ))
-  const icon = (
-    await screen.findByLabelText('Full name')
-  ).closest('form')!.querySelector('span[aria-hidden="true"]')!
+  const icon = (await screen.findByLabelText('Full name'))
+    .closest('form')!
+    .querySelector('span[aria-hidden="true"]')!
   expect(icon.classList.contains('invisible')).toBe(true)
   await fill(await screen.findByLabelText('Full name'), 'Ada Lovelace')
   await fill(

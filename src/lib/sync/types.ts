@@ -97,7 +97,7 @@ export const decodeRecordDoc = (s: string): SyncRecord => {
 export interface DeviceEnvelope {
   v: 1
   deviceId: string
-  deks: WrappedDeK[]
+  deks: readonly WrappedDeK[]
 }
 
 const WrappedDeKSchema = Schema.Struct({

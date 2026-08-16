@@ -89,7 +89,7 @@ export interface WrappedDeK {
 /** Non-secret header record → 1 row in the envelope store, key "root". */
 export interface Envelope {
   version: number
-  deks: WrappedDeK[]
+  deks: readonly WrappedDeK[]
 }
 
 /** The mirror's node identity (S6/M3): iroh SecretKey + the persisted vault doc. */

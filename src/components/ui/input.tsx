@@ -14,6 +14,7 @@ export function Input(props: {
   type?: string
   title?: string
   autocomplete?: string
+  revealable?: boolean
   onInput?: JSX.EventHandlerUnion<HTMLInputElement, InputEvent>
 }) {
   return (
@@ -30,6 +31,7 @@ export function Input(props: {
         type={props.type}
         title={props.title}
         autocomplete={props.autocomplete}
+        revealable={props.revealable}
         onInput={props.onInput}
       />
     </TextFieldRoot>

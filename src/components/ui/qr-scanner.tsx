@@ -120,7 +120,9 @@ export function QrScanner(props: {
       pendingTimer = window.setTimeout(() => {
         pendingTimer = null
         if (!settled) {
-          setMessage('Waiting for camera permission — allow access when prompted.')
+          setMessage(
+            'Waiting for camera permission — allow access when prompted.',
+          )
         }
       }, 8000)
     },
