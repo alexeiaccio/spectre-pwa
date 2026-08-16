@@ -87,7 +87,7 @@ export function QrImagePicker(props: { onScan: (text: string) => void }) {
         ref={inputRef}
         type="file"
         accept="image/*"
-        class="hidden"
+        class="sr-only"
         tabindex={-1}
         aria-hidden="true"
         onChange={(e) => void onPick(e.target.files?.[0])}

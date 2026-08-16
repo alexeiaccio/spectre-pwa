@@ -1,4 +1,4 @@
-import { createSignal, Show } from 'solid-js'
+import { createEffect, createSignal, onCleanup, Show } from 'solid-js'
 import { Clock, Effect } from 'effect'
 import { useScreen } from '../lib/flow.ts'
 import {
@@ -80,6 +80,7 @@ export default function JoinScreen() {
   const [localCode, setLocalCode] = createSignal('')
   const [error, setError] = createSignal<string | null>(null)
   const [busy, setBusy] = createSignal(false)
+  const [relay, setRelay] = createSignal<string | null>(null)
 
   // A device that already has a vault joins by adopting the host's code.
   const existingVault = (): boolean =>
@@ -114,14 +115,28 @@ export default function JoinScreen() {
 
   const startJoin = async (): Promise<void> => {
     setError(null)
+    setRelay(null)
     if (!ticket().trim()) return
     setBusy(true)
     setStep('syncing')
     try {
       const adapter = getSyncAdapter()
       sync = adapter
-      await adapter.start()
-      const joined = await adapter.joinDoc(ticket().trim())
+      try {
+        await adapter.start()
+      } catch (e) {
+        throw new SyncUnavailableError({
+          message: `could not start the sync engine: ${e instanceof Error ? e.message : String(e)}`,
+        })
+      }
+      let joined: { docId: string }
+      try {
+        joined = await adapter.joinDoc(ticket().trim())
+      } catch (e) {
+        throw new SyncUnavailableError({
+          message: `could not join the sync doc — is the relay reachable? (${e instanceof Error ? e.message : String(e)})`,
+        })
+      }
       await persistDoc(ticket().trim(), joined.docId)
       docId = joined.docId
       // Experimental sync may deliver slowly (or not at all) — poll with a
@@ -160,6 +175,21 @@ export default function JoinScreen() {
       setBusy(false)
     }
   }
+
+  // While syncing, poll the relay connection status so "no connection" is
+  // diagnosable: the syncing step shows "Relay: <status>".
+  createEffect(
+    () => step() === 'syncing',
+    (syncing) => {
+      if (!syncing) return
+      const timer = window.setInterval(() => {
+        const s = sync
+        if (!s) return
+        void s.relayStatus().then(setRelay).catch(() => {})
+      }, 2000)
+      onCleanup(() => window.clearInterval(timer))
+    },
+  )
 
   const submitCode = async (): Promise<void> => {
     if (!hostEnvelope) return
@@ -435,6 +465,9 @@ export default function JoinScreen() {
         <Accent>
           {busy() ? 'Connecting to the other device…' : 'Waiting for the host…'}
         </Accent>
+        <Show when={relay()}>
+          <Hint>Relay: {relay()}</Hint>
+        </Show>
         <Button variant="primary" onClick={() => void startJoin()}>
           Retry
         </Button>

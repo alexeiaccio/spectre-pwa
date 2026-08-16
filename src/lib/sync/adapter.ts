@@ -41,6 +41,8 @@ export interface SyncAdapter {
   get(docId: string, key: string): Promise<string | null>
   set(docId: string, key: string, value: string): Promise<void>
   syncStatus(docId: string): Promise<string>
+  /** Home relay connection status (diagnostics). */
+  relayStatus(): Promise<string>
 }
 
 function createWasmSyncAdapter(): SyncAdapter {
@@ -121,6 +123,10 @@ function createWasmSyncAdapter(): SyncAdapter {
     syncStatus: async (docId) => {
       const n = await ensure()
       return n.sync_status(docId)
+    },
+    relayStatus: async () => {
+      const n = await ensure()
+      return n.relay_status()
     },
   }
 }
