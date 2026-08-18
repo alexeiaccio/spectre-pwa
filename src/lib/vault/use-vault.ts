@@ -180,6 +180,7 @@ export function useVault() {
     envelope: Envelope
     records: Map<string, SyncRecord>
     dek: AesKey
+    devicePrivatePkcs8?: Uint8Array
   }): Promise<Vault | undefined> =>
     withBusy(async () => {
       const result = await runPromise(vaultImpl.joinImport(joined))

@@ -80,17 +80,22 @@ it). This effort is the app-side trust/schema/flow redesign on top.
   gated/single-flight) does inbound `syncNow` + outbound write-on-change under
   K with a confirmed-push watermark; `sync-status.ts` (lastSyncedAt, pending,
   relayReachable, syncing). 6 tests; 120/120 green.
+- [GS6 · Revoke a device via key rotation](tickets/GS6-revoke-device.md) —
+  closed: full revocation (mechanism + integration). Per-device ECDH keys,
+  `rotateGroupKey`/`consumeRekey`, doc `devices` roster; vault session holds
+  the device key + unlock secret, `applyRekey` (runner auto-consumes),
+  `revokeDevices`; Settings "Paired devices" **Remove** action rotates K′,
+  re-encrypts, and drops the device — real, prompt-free. 3 mechanism tests;
+  123/123 green.
+
+## Device-management UI (folds into GS5/GS6, decided 2026-08-18)
 
 ## Not yet specified
-- [GS6 · Revoke a device via key rotation](tickets/GS6-revoke-device.md) — open
-  (mechanism done). Real "remove connection": rotate to a new group key epoch
-  K′, re-encrypt all shared records, re-share K′ only to remaining devices.
-  The removed device still holds its old records, but can no longer decrypt new
-  writes. Decision (2026-08-18): real revocation, not UI-only. **Done +
-  tested:** per-device ECDH keys in the envelope, `rotateGroupKey`,
-  `consumeRekey`, rekey records; 3 tests prove exclusion. **Remaining:**
-  session device-key holder, settings Remove-connection UI, runner consume
-  wiring.
+
+GS1–GS6 are all closed; the group-sync effort is complete and verified.
+
+- [GS6 · Revoke a device via key rotation](tickets/GS6-revoke-device.md) —
+  closed; real revocation implemented (see Decisions so far).
 
 ## Device-management UI (folds into GS5/GS6, decided 2026-08-18)
 

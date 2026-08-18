@@ -38,6 +38,9 @@ const EnvelopeSchema = Schema.Struct({
   key: Schema.String,
   version: Schema.Int,
   deks: Schema.Array(WrappedDeKSchema),
+  groupId: Schema.optional(Schema.String),
+  devicePublic: Schema.optional(Buf),
+  deviceSecret: Schema.optional(Schema.Array(WrappedDeKSchema)),
 })
 
 const PrefsSchema = Schema.Struct({
@@ -360,7 +363,15 @@ export const readDeviceEnvelope = Effect.fn('vault.storage.readDeviceEnvelope')(
       qb.from(ENVELOPE_STORE).select().equals(deviceId),
     )
     const row = rows[0]
-    return row ? { version: row.version, deks: row.deks } : undefined
+    return row
+      ? {
+          version: row.version,
+          deks: row.deks,
+          groupId: row.groupId,
+          devicePublic: row.devicePublic,
+          deviceSecret: row.deviceSecret,
+        }
+      : undefined
   },
 )
 
@@ -379,6 +390,9 @@ export const writeDeviceEnvelope = Effect.fn(
       key: deviceId,
       version: envelope.version,
       deks: envelope.deks,
+      groupId: envelope.groupId,
+      devicePublic: envelope.devicePublic,
+      deviceSecret: envelope.deviceSecret,
     }),
   )
 })

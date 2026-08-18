@@ -11,9 +11,13 @@ import {
 import { readMeta, readNodeIdentity } from '../vault/storage.ts'
 import { vaultImpl } from '../vault/service.ts'
 import { syncStatus, updateSyncStatus } from './sync-status.ts'
+import { decodeRekeyDoc, rekeyKey } from './types.ts'
 import type { Vault } from '../vault/schema.ts'
 
 const run = <A, E>(e: Effect.Effect<A, E>): Promise<A> => Effect.runPromise(e)
+
+/** Marker written after a rekey is consumed, so we don't re-apply it every pass. */
+const REKEY_CONSUMED = 'consumed'
 
 /**
  * GS5: how often the in-app timer fires while the app is open. 30s bounds the
@@ -87,6 +91,22 @@ export const runSyncPass = async (): Promise<SyncPassResult> => {
     if (!node?.docId || !session) {
       updateSyncStatus({ syncing: false })
       return noop(syncStatus().pendingChanges)
+    }
+
+    // GS6: consume a pending rekey for this device (switch to the new group
+    // key epoch K′) BEFORE the inbound/outbound passes, so they use K′.
+    const metaDevice = await run(readMeta())
+    if (metaDevice?.deviceId && session.devicePrivatePkcs8) {
+      const sync = getSyncAdapter()
+      const rk = await sync.get(node.docId, rekeyKey(metaDevice.deviceId))
+      if (rk && rk !== REKEY_CONSUMED) {
+        try {
+          await run(vaultImpl.applyRekey(decodeRekeyDoc(rk)))
+          await sync.set(node.docId, rekeyKey(metaDevice.deviceId), REKEY_CONSUMED)
+        } catch {
+          // retry on the next pass
+        }
+      }
     }
 
     // Inbound half: pull known keys into the mirror (records under K).

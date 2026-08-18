@@ -12,8 +12,21 @@ import { useScreen } from '../lib/flow.ts'
 import { getSyncAdapter, persistDoc } from '../lib/sync/adapter.ts'
 import { createGroupInvitation } from '../lib/sync/invitation.ts'
 import type { Identity } from '../lib/vault/schema.ts'
-import { readMeta } from '../lib/vault/storage.ts'
+import { readMeta, readNodeIdentity } from '../lib/vault/storage.ts'
 import { vaultImpl } from '../lib/vault/service.ts'
+import {
+  DEVICES_KEY,
+  decodeDeviceList,
+  decodeGroupEnvelope,
+  encodeDeviceList,
+  encodeGroupEnvelope,
+  encodeRecordDoc,
+  encodeRekeyDoc,
+  envelopeKey,
+  rekeyKey,
+  type GroupDevice,
+  type GroupEnvelope,
+} from '../lib/sync/types.ts'
 
 interface AutoLockOption {
   value: number
@@ -48,6 +61,100 @@ export default function SettingsScreen() {
   // the picker opens (unlock / identity-set change / hide re-opens the form);
   // the user toggles individual ids off. GS4.
   const [selected, setSelected] = createSignal<Set<string>>(new Set())
+  // GS6: paired-device roster (excluding this device) + remove.
+  const [paired, setPaired] = createSignal<GroupDevice[]>([])
+  const [removeError, setRemoveError] = createSignal<string | null>(null)
+  const [removing, setRemoving] = createSignal<string | null>(null)
+
+  const loadPaired = async (): Promise<void> => {
+    try {
+      const node = await Effect.runPromise(readNodeIdentity())
+      if (!node?.docId) {
+        setPaired([])
+        return
+      }
+      const meta = await Effect.runPromise(readMeta())
+      const adapter = getSyncAdapter()
+      await adapter.start()
+      const rosterStr = await adapter.get(node.docId, DEVICES_KEY)
+      if (!rosterStr) {
+        setPaired([])
+        return
+      }
+      setPaired(
+        decodeDeviceList(rosterStr).devices.filter(
+          (d) => d.deviceId !== meta?.deviceId,
+        ),
+      )
+    } catch {
+      setPaired([])
+    }
+  }
+
+  // Refresh the roster whenever the vault unlocks.
+  createEffect(
+    () => (api.vault.status().kind === 'unlocked' ? 1 : 0),
+    (active) => {
+      if (active) void loadPaired()
+      else setPaired([])
+    },
+  )
+
+  const onRemoveDevice = async (deviceId: string): Promise<void> => {
+    setRemoveError(null)
+    setRemoving(deviceId)
+    try {
+      const node = await Effect.runPromise(readNodeIdentity())
+      if (!node?.docId) return
+      const session = await Effect.runPromise(vaultImpl.session())
+      if (!session) throw new Error('vault locked')
+      const meta = await Effect.runPromise(readMeta())
+      if (!meta?.deviceId) throw new Error('no device identity')
+      const adapter = getSyncAdapter()
+      await adapter.start()
+
+      // Fetch every remaining device's group envelope (for devicePublic rekeys).
+      const rosterStr = await adapter.get(node.docId, DEVICES_KEY)
+      const devices = rosterStr ? decodeDeviceList(rosterStr).devices : []
+      const remainingEnvelopes = new Map<string, GroupEnvelope>()
+      for (const d of devices) {
+        if (d.deviceId === deviceId) continue
+        const envStr = await adapter.get(node.docId, envelopeKey(d.deviceId))
+        if (envStr)
+          remainingEnvelopes.set(d.deviceId, decodeGroupEnvelope(envStr))
+      }
+
+      const { records, rekeys, hostEnvelope } = await Effect.runPromise(
+        vaultImpl.revokeDevices({
+          identities: session.vault.identities,
+          removedDeviceIds: new Set([deviceId]),
+          remainingEnvelopes,
+        }),
+      )
+      for (const [id, rec] of records)
+        await adapter.set(node.docId, id, encodeRecordDoc(rec))
+      for (const [id, rk] of rekeys)
+        await adapter.set(node.docId, rekeyKey(id), encodeRekeyDoc(rk))
+      await adapter.set(
+        node.docId,
+        envelopeKey(meta.deviceId),
+        encodeGroupEnvelope(hostEnvelope),
+      )
+      await adapter.set(
+        node.docId,
+        DEVICES_KEY,
+        encodeDeviceList({
+          v: 1,
+          devices: devices.filter((d) => d.deviceId !== deviceId),
+        }),
+      )
+      await loadPaired()
+    } catch (e) {
+      setRemoveError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setRemoving(null)
+    }
+  }
 
   /** Identities available to share from the unlocked session (reactive; empty while locked). */
   const shareableIdentities = createMemo<readonly Identity[]>(() => {
@@ -268,6 +375,39 @@ export default function SettingsScreen() {
         </Show>
         <Show when={pairError()}>
           <p class="text-xs text-red-400">{pairError()}</p>
+        </Show>
+      </Card>
+      <Card variant="dashed">
+        <Hint>Paired devices (settings — remove revokes access via key rotation):</Hint>
+        <Show when={removeError()}>
+          <p class="text-xs text-red-400">{removeError()}</p>
+        </Show>
+        <Show
+          when={paired().length === 0}
+          fallback={
+            <ul class="flex flex-col gap-2">
+              <For each={paired()}>
+                {(dev) => (
+                  <li class="flex items-center justify-between gap-2 rounded border border-surface-700 px-3 py-2">
+                    <span class="text-sm text-slate-200">
+                      {dev.deviceId.slice(0, 8)}…
+                    </span>
+                    <Button
+                      variant="secondary"
+                      disabled={removing() !== null}
+                      onClick={() => void onRemoveDevice(dev.deviceId)}
+                    >
+                      {removing() === dev.deviceId ? 'Removing…' : 'Remove'}
+                    </Button>
+                  </li>
+                )}
+              </For>
+            </ul>
+          }
+        >
+          <p class="text-xs text-slate-400">
+            No other paired devices yet.
+          </p>
         </Show>
       </Card>
     </div>

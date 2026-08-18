@@ -269,6 +269,8 @@ export interface GroupJoinConsent {
   identities: Identity[]
   /** The shared group key — this device's session unlock. */
   groupKey: AesKey
+  /** GS6: this device's ECDH private (pkcs8) — for background rekey consume. */
+  devicePrivatePkcs8: Uint8Array
 }
 
 export const consentGroupJoin = Effect.fn('sync.consentGroupJoin')(
@@ -332,6 +334,7 @@ export const consentGroupJoin = Effect.fn('sync.consentGroupJoin')(
       },
       identities,
       groupKey,
+      devicePrivatePkcs8: new Uint8Array(device.privatePkcs8),
     }
   },
 )

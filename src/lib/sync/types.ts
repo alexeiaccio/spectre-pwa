@@ -271,3 +271,35 @@ export const decodeRekeyDoc = (s: string): RekeyRecord => {
 
 /** Doc key for a device's rekey record (GS6). */
 export const rekeyKey = (deviceId: string): string => `rekey/${deviceId}`
+
+/** Doc key for the group's device roster (GS6: enumeration + rotation targets). */
+export const DEVICES_KEY = 'devices'
+
+export interface GroupDevice {
+  deviceId: string
+  /** Hex of this device's ECDH public key (for rekey targets). */
+  publicHex: string
+}
+
+export interface GroupDeviceList {
+  v: 1
+  devices: readonly GroupDevice[]
+}
+
+const GroupDeviceSchema = Schema.Struct({
+  deviceId: Schema.String,
+  publicHex: Schema.String,
+})
+
+const GroupDeviceListSchema = Schema.Struct({
+  v: Schema.Literal(1),
+  devices: Schema.Array(GroupDeviceSchema),
+})
+
+export const encodeDeviceList = (l: GroupDeviceList): string =>
+  Schema.encodeSync(Schema.fromJsonString(GroupDeviceListSchema))(l)
+
+export const decodeDeviceList = (s: string): GroupDeviceList => {
+  const w = Schema.decodeSync(Schema.fromJsonString(GroupDeviceListSchema))(s)
+  return { v: 1, devices: Array.from(w.devices) }
+}

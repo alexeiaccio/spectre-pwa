@@ -25,9 +25,12 @@ import {
   encodeIdentityRecord,
 } from '../lib/sync/records.ts'
 import {
+  DEVICES_KEY,
   HOST_KEY,
+  decodeDeviceList,
   decodeHostDoc,
   decodeRecordDoc,
+  encodeDeviceList,
   encodeGroupEnvelope,
   encodeRecordDoc,
   envelopeKey,
@@ -37,6 +40,9 @@ import { createPasskeyWithPrf, isPrfUnavailable } from '../lib/vault/passkey.ts'
 import type { Identity } from '../lib/vault/schema.ts'
 
 type JoinStep = 'unlock' | 'invite' | 'syncing' | 'setkey'
+
+const toHex = (u: Uint8Array): string =>
+  [...u].map((b) => b.toString(16).padStart(2, '0')).join('')
 
 /**
  * Poll `fn` until it returns a value, the Effect `Clock` passes the deadline,
@@ -228,12 +234,41 @@ export default function JoinScreen() {
         await sync.set(docId, id, encodeRecordDoc(rec))
       }
 
-      // Complete locally: adopt the group envelope + records + K.
+      // Appends this device to the group roster (GS6 enumeration/rotation targets).
+      const rosterStr = await sync.get(docId, DEVICES_KEY)
+      const roster = rosterStr
+        ? decodeDeviceList(rosterStr)
+        : { v: 1, devices: [] }
+      if (!roster.devices.some((d) => d.deviceId === deviceId)) {
+        await sync.set(
+          docId,
+          DEVICES_KEY,
+          encodeDeviceList({
+            v: 1,
+            devices: [
+              ...roster.devices,
+              {
+                deviceId,
+                publicHex: toHex(new Uint8Array(consent.envelope.devicePublic)),
+              },
+            ],
+          }),
+        )
+      }
+
+      // Complete locally: adopt the group envelope + records + K + device key.
       const result = await api.vault.importJoined({
         deviceId,
-        envelope: { version: 2, deks: consent.envelope.deks },
+        envelope: {
+          version: 2,
+          deks: consent.envelope.deks,
+          groupId: consent.envelope.groupId,
+          devicePublic: consent.envelope.devicePublic,
+          deviceSecret: consent.envelope.deviceSecret,
+        },
         records,
         dek: consent.groupKey,
+        devicePrivatePkcs8: consent.devicePrivatePkcs8,
       })
       if (!result) setError('could not save the joined vault')
       else navigate('/')

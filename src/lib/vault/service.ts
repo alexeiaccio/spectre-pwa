@@ -18,9 +18,18 @@ import {
   writeMeta,
   writeRecords,
 } from './storage.ts'
+import {
+  decryptRekey,
+  encryptRekey,
+  generateDeviceKeypair,
+  generateGroupKey,
+  importGroupKey,
+  unwrapRawSecret,
+  wrapGroupKeyUnder,
+} from '../sync/group.ts'
 import { createPasskeyWithPrf, getPrfOutput } from './passkey.ts'
 import { decodeIdentityRecord, encodeIdentityRecord } from '../sync/records.ts'
-import type { SyncRecord } from '../sync/types.ts'
+import type { GroupEnvelope, RekeyRecord, SyncRecord } from '../sync/types.ts'
 import type { CryptoError } from './crypto-dek.ts'
 import type { PasskeyError } from './passkey.ts'
 import type { Envelope, Identity, Vault, WrappedDeK } from './schema.ts'
@@ -33,10 +42,6 @@ type VaultError =
   | PasskeyError
 
 const textEncoder = new TextEncoder()
-const KEK_SALT_BYTES = 16
-
-/** Copy a Uint8Array into a fresh ArrayBuffer (schema stores ArrayBuffer). */
-const toBuf = (u: Uint8Array): ArrayBuffer => u.slice().buffer
 
 // --- Service layer (Effect v4 function-style key) ---
 
@@ -79,9 +84,34 @@ interface VaultService {
     envelope: Envelope
     records: Map<string, SyncRecord>
     dek: AesKey
+    devicePrivatePkcs8?: Uint8Array
   }) => Effect.Effect<{ vault: Vault }, VaultError>
   /** Raw group-key bytes (K, extractable) from the live session — for invitations (GS2/GS3). */
   exportGroupKey: () => Effect.Effect<Uint8Array, VaultError>
+  /**
+   * GS6: consume a device rekey record in the background — decrypt K′ with this
+   * device's ECDH private, rewrap under its own unlock, re-encrypt the mirror
+   * under K′, and switch the session to K′.
+   */
+  applyRekey: (rekey: RekeyRecord) => Effect.Effect<{ vault: Vault }, VaultError>
+  /**
+   * GS6: host-side revocation — rotate to a new group key K′, re-encrypt all
+   * shared records, rewrap K′ into the host's envelope (using the in-session
+   * unlock), and emit a rekey record to each remaining device. Uses the live
+   * session, so no passphrase prompt is needed.
+   */
+  revokeDevices: (args: {
+    identities: readonly Identity[]
+    removedDeviceIds: ReadonlySet<string>
+    remainingEnvelopes: ReadonlyMap<string, GroupEnvelope>
+  }) => Effect.Effect<
+    {
+      records: Map<string, SyncRecord>
+      rekeys: Map<string, RekeyRecord>
+      hostEnvelope: GroupEnvelope
+    },
+    VaultError
+  >
   /** Drop the in-memory session. */
   lock: () => Effect.Effect<void>
   /** The current unlocked session (null when locked). */
@@ -95,90 +125,59 @@ class VaultUnlockedError extends Schema.TaggedError<VaultUnlockedError>()(
   { message: Schema.String },
 ) {}
 
-/** The unlocked in-memory session: the vault DEK + decrypted tree. */
+/** The unlocked in-memory session: the group key K + decrypted tree (+ device ECDH private + unlock secret for GS6 rekey). */
 interface VaultSession {
   dek: AesKey
   vault: Vault
+  /** GS6: this device's ECDH private key (pkcs8), to consume rekeys in the background. */
+  devicePrivatePkcs8?: Uint8Array
+  /** The unwrap secret (PRF output or recovery-code bytes) + its KEK salt, to rewrap after a rekey. */
+  unlockSecret?: Uint8Array
+  unlockSalt?: Uint8Array
+  unlockMethod?: 'passkey' | 'recovery'
 }
 
-const makeEnvelope = Effect.fn('vault.makeEnvelope')(function* (
-  passkeyPrf: Uint8Array,
-  passkeyPrfSalt: Uint8Array,
-  passkeyCredId: string,
-  recoveryCode: string,
-): Effect.fn.Return<{ dek: AesKey; envelope: Envelope }, VaultError> {
-  const { key: dek, raw } = yield* generateDek()
-  const envelope = yield* wrapRaw(
-    raw,
-    passkeyPrf,
-    passkeyPrfSalt,
-    passkeyCredId,
-    recoveryCode,
-  )
-  return { dek, envelope }
-})
-
-/**
- * Wrap raw DEK bytes under the passkey PRF-derived KEK and the recovery-code KEK,
- * then wipe the raw bytes. Returns the envelope records (keyed by method).
- * The passkey PRF salt + credential id are recorded so unlock() re-derives the
- * same PRF output from the same credential.
- */
-const wrapRaw = Effect.fn('vault.wrapRaw')(function* (
+const wrapKeyBytes = Effect.fn('vault.wrapKeyBytes')(function* (
   raw: Uint8Array,
-  passkeyPrf: Uint8Array,
-  passkeyPrfSalt: Uint8Array,
-  passkeyCredId: string,
   recoveryCode: string,
-): Effect.fn.Return<Envelope, VaultError> {
-  // Wrap under passkey PRF
-  const kemSaltP = crypto.getRandomValues(new Uint8Array(KEK_SALT_BYTES))
-  const kekP = yield* kekFromPrf(passkeyPrf, kemSaltP)
-  const wrappedP = yield* wrapDek(raw, kekP)
-  const passkeyRecord: WrappedDeK = {
-    method: 'passkey',
-    salt: toBuf(kemSaltP),
-    prfSalt: toBuf(passkeyPrfSalt),
-    credId: passkeyCredId,
-    iv: toBuf(wrappedP.iv),
-    wrapped: toBuf(wrappedP.wrapped),
-  }
-
-  // Wrap under recovery code
-  const kemSaltR = crypto.getRandomValues(new Uint8Array(KEK_SALT_BYTES))
-  const kekR = yield* kekFromPrf(textEncoder.encode(recoveryCode), kemSaltR)
-  const wrappedR = yield* wrapDek(raw, kekR)
-  raw.fill(0) // raw DEK bytes are no longer needed — wipe
-  const recoveryRecord: WrappedDeK = {
-    method: 'recovery',
-    salt: toBuf(kemSaltR),
-    iv: toBuf(wrappedR.iv),
-    wrapped: toBuf(wrappedR.wrapped),
-  }
-
-  return { version: 1, deks: [passkeyRecord, recoveryRecord] }
+  passkey?: { prf: Uint8Array; prfSalt: Uint8Array; credId: string },
+): Effect.fn.Return<WrappedDeK[], VaultError> {
+  return yield* wrapGroupKeyUnder({
+    raw: new Uint8Array(raw),
+    passphrase: recoveryCode,
+    passkeyPrf: passkey?.prf,
+    passkeyPrfSalt: passkey?.prfSalt,
+    passkeyCredId: passkey?.credId,
+  })
 })
 
 /**
- * Generate a DEK wrapped under the recovery code only — no passkey record.
- * Used by setupRecoveryOnly for contexts without a PRF-capable platform
- * authenticator (installed PWA on macOS, Windows Hello, …).
+ * First-run vault creation: the session key IS the group key K (extractable,
+ * GS3). Also mints this device's ECDH keypair (GS6): the public key goes
+ * plaintext into the envelope so the group can rekey to this device, and the
+ * private key (pkcs8) is wrapped under the device's own unlock.
  */
-const makeRecoveryEnvelope = Effect.fn('vault.makeRecoveryEnvelope')(function* (
+const mintDeviceEnvelope = Effect.fn('vault.mintDeviceEnvelope')(function* (
   recoveryCode: string,
-): Effect.fn.Return<{ dek: AesKey; envelope: Envelope }, VaultError> {
+  passkey?: { prf: Uint8Array; prfSalt: Uint8Array; credId: string },
+): Effect.fn.Return<
+  { dek: AesKey; envelope: Envelope; devicePrivatePkcs8: Uint8Array },
+  VaultError
+> {
   const { key: dek, raw } = yield* generateDek()
-  const kemSaltR = crypto.getRandomValues(new Uint8Array(KEK_SALT_BYTES))
-  const kekR = yield* kekFromPrf(textEncoder.encode(recoveryCode), kemSaltR)
-  const wrappedR = yield* wrapDek(raw, kekR)
-  raw.fill(0) // raw DEK bytes are no longer needed — wipe
-  const recoveryRecord: WrappedDeK = {
-    method: 'recovery',
-    salt: toBuf(kemSaltR),
-    iv: toBuf(wrappedR.iv),
-    wrapped: toBuf(wrappedR.wrapped),
+  const device = yield* generateDeviceKeypair()
+  const deks = yield* wrapKeyBytes(raw, recoveryCode, passkey)
+  const deviceSecret = yield* wrapKeyBytes(device.privatePkcs8, recoveryCode, passkey)
+  return {
+    dek,
+    envelope: {
+      version: 2,
+      deks,
+      devicePublic: device.publicRaw.slice().buffer,
+      deviceSecret,
+    },
+    devicePrivatePkcs8: device.privatePkcs8,
   }
-  return { dek, envelope: { version: 1, deks: [recoveryRecord] } }
 })
 
 const unwrapWith = Effect.fn('vault.unwrapWith')(function* (
@@ -269,6 +268,29 @@ const unwrapSessionDek = Effect.fn('vault.unwrapSessionDek')(function* (
   return yield* unwrapWith(textEncoder.encode(method.code), rec)
 })
 
+/** GS6: unwrap this device's ECDH private (for background rekey consume). */
+const unwrapDevicePrivate = Effect.fn('vault.unwrapDevicePrivate')(function* (
+  method: { kind: 'passkey' } | { kind: 'recovery'; code: string },
+  envelope: Envelope,
+): Effect.fn.Return<Uint8Array | undefined, VaultError> {
+  if (!envelope.deviceSecret || envelope.deviceSecret.length === 0)
+    return undefined
+  if (method.kind === 'passkey') {
+    const rec = envelope.deviceSecret.find((d) => d.method === 'passkey')
+    if (!rec?.prfSalt || !rec.credId) return undefined
+    const { prfOutput } = yield* getPrfOutput(
+      new Uint8Array(rec.prfSalt),
+      rec.credId,
+    )
+    return yield* unwrapRawSecret(envelope.deviceSecret, 'passkey', prfOutput)
+  }
+  return yield* unwrapRawSecret(
+    envelope.deviceSecret,
+    'recovery',
+    textEncoder.encode(method.code),
+  )
+})
+
 /** The session `Ref` is created inside `VaultServiceLive` so it is per-runtime, not module-global. */
 const makeVaultImpl = (
   session: Ref.Ref<VaultSession | null>,
@@ -286,17 +308,15 @@ const makeVaultImpl = (
       })
     const salt = crypto.getRandomValues(new Uint8Array(32))
     const { credId, prfOutput } = yield* createPasskeyWithPrf(salt)
-    const { dek, envelope } = yield* makeEnvelope(
-      prfOutput,
-      salt,
-      credId,
+    const { dek, envelope, devicePrivatePkcs8 } = yield* mintDeviceEnvelope(
       recoveryCode,
+      { prf: prfOutput, prfSalt: salt, credId },
     )
     const deviceId = crypto.randomUUID()
     yield* writeDeviceEnvelope(deviceId, envelope)
     yield* writeMeta({ deviceId })
     const vault: Vault = { formatVersion: 1, identities: [] }
-    yield* Ref.set(session, { dek, vault })
+    yield* Ref.set(session, { dek, vault, devicePrivatePkcs8 })
     const recoveryRecord = envelope.deks.find((d) => d.method === 'recovery')!
     return { recoveryRecord, identity: vault }
   }),
@@ -309,12 +329,14 @@ const makeVaultImpl = (
       return yield* new VaultUnlockedError({
         message: 'vault already exists',
       })
-    const { dek, envelope } = yield* makeRecoveryEnvelope(recoveryCode)
+    const { dek, envelope, devicePrivatePkcs8 } = yield* mintDeviceEnvelope(
+      recoveryCode,
+    )
     const deviceId = crypto.randomUUID()
     yield* writeDeviceEnvelope(deviceId, envelope)
     yield* writeMeta({ deviceId })
     const vault: Vault = { formatVersion: 1, identities: [] }
-    yield* Ref.set(session, { dek, vault })
+    yield* Ref.set(session, { dek, vault, devicePrivatePkcs8 })
     return { identity: vault }
   }),
 
@@ -329,8 +351,28 @@ const makeVaultImpl = (
         message: 'no envelope for device',
       })
     const dek = yield* unwrapSessionDek({ kind: 'passkey' }, envelope)
+    const devicePrivatePkcs8 = yield* unwrapDevicePrivate(
+      { kind: 'passkey' },
+      envelope,
+    )
+    const pRec = envelope.deks.find((d) => d.method === 'passkey')
+    let unlockSecret: Uint8Array | undefined
+    if (pRec?.prfSalt && pRec.credId) {
+      const secret = yield* getPrfOutput(
+        new Uint8Array(pRec.prfSalt),
+        pRec.credId,
+      )
+      unlockSecret = secret.prfOutput
+    }
     const vault = yield* loadVault(dek)
-    yield* Ref.set(session, { dek, vault })
+    yield* Ref.set(session, {
+      dek,
+      vault,
+      devicePrivatePkcs8,
+      unlockSecret,
+      unlockSalt: pRec ? new Uint8Array(pRec.salt) : undefined,
+      unlockMethod: unlockSecret ? 'passkey' : undefined,
+    })
     return vault
   }),
 
@@ -344,8 +386,21 @@ const makeVaultImpl = (
         message: 'no envelope for device',
       })
     const dek = yield* unwrapSessionDek({ kind: 'recovery', code }, envelope)
+    const devicePrivatePkcs8 = yield* unwrapDevicePrivate(
+      { kind: 'recovery', code },
+      envelope,
+    )
+    const rRec = envelope.deks.find((d) => d.method === 'recovery')
+    const unlockSecret = textEncoder.encode(code)
     const vault = yield* loadVault(dek)
-    yield* Ref.set(session, { dek, vault })
+    yield* Ref.set(session, {
+      dek,
+      vault,
+      devicePrivatePkcs8,
+      unlockSecret,
+      unlockSalt: rRec ? new Uint8Array(rRec.salt) : undefined,
+      unlockMethod: 'recovery',
+    })
     return vault
   }),
 
@@ -368,15 +423,25 @@ const makeVaultImpl = (
     if (!rec)
       return yield* new VaultUnlockedError({ message: 'no recovery record' })
     yield* unwrapWith(textEncoder.encode(recoveryCode), rec)
-    // Rotate the DEK: fresh passkey PRF, fresh wrap under passkey + recovery code.
+    // Rotate the DEK: fresh passkey PRF, fresh wrap; keep this device's ECDH
+    // identity (same devicePublic/private), just re-wrap the private under the
+    // new passkey + code.
     const salt = crypto.getRandomValues(new Uint8Array(32))
     const { credId, prfOutput } = yield* createPasskeyWithPrf(salt)
-    const { dek, envelope: nextEnvelope } = yield* makeEnvelope(
-      prfOutput,
-      salt,
-      credId,
-      recoveryCode,
-    )
+    const passkey = { prf: prfOutput, prfSalt: salt, credId }
+    const { key: dek, raw } = yield* generateDek()
+    const deks = yield* wrapKeyBytes(raw, recoveryCode, passkey)
+    const devicePrivatePkcs8 = cur.devicePrivatePkcs8
+    const deviceSecret = devicePrivatePkcs8
+      ? yield* wrapKeyBytes(devicePrivatePkcs8, recoveryCode, passkey)
+      : []
+    const nextEnvelope: Envelope = {
+      version: envelope.version ?? 2,
+      deks,
+      groupId: envelope.groupId,
+      devicePublic: envelope.devicePublic,
+      deviceSecret,
+    }
     yield* writeDeviceEnvelope(deviceId, nextEnvelope)
     yield* writeVault(
       dek,
@@ -384,7 +449,7 @@ const makeVaultImpl = (
       cur.vault.identities.map((i) => i.id),
       cur.vault,
     )
-    yield* Ref.set(session, { dek, vault: cur.vault })
+    yield* Ref.set(session, { dek, vault: cur.vault, devicePrivatePkcs8 })
     return { vault: cur.vault }
   }),
 
@@ -408,13 +473,19 @@ const makeVaultImpl = (
     envelope: Envelope
     records: Map<string, SyncRecord>
     dek: AesKey
+    /** GS6: this device's ECDH private (computed at join from its own unlock). */
+    devicePrivatePkcs8?: Uint8Array
   }): Effect.fn.Return<{ vault: Vault }, VaultError> {
     yield* writeDeviceEnvelope(joined.deviceId, joined.envelope)
     yield* writeRecords(joined.records)
     yield* writeMeta({ deviceId: joined.deviceId })
     // Load the joined identities back from the records (they are under K).
     const loaded = yield* loadVault(joined.dek)
-    yield* Ref.set(session, { dek: joined.dek, vault: loaded })
+    yield* Ref.set(session, {
+      dek: joined.dek,
+      vault: loaded,
+      devicePrivatePkcs8: joined.devicePrivatePkcs8,
+    })
     return { vault: loaded }
   }),
 
@@ -432,6 +503,119 @@ const makeVaultImpl = (
       ),
     )
     return new Uint8Array(raw)
+  }),
+
+  applyRekey: Effect.fn('VaultService.applyRekey')(function* (
+    rekey: RekeyRecord,
+  ): Effect.fn.Return<{ vault: Vault }, VaultError> {
+    const cur = yield* Ref.get(session)
+    if (!cur?.devicePrivatePkcs8 || !cur.unlockSecret || !cur.unlockMethod || !cur.unlockSalt)
+      return yield* new VaultUnlockedError({ message: 'vault locked or no device key' })
+    const meta = yield* readMeta()
+    if (!meta?.deviceId) return yield* new VaultUnlockedError({ message: 'no device identity' })
+    const env = yield* readDeviceEnvelope(meta.deviceId)
+    if (!env) return yield* new VaultUnlockedError({ message: 'no envelope' })
+
+    const kpRaw = yield* decryptRekey(new Uint8Array(cur.devicePrivatePkcs8), {
+      ephPublic: new Uint8Array(rekey.ephPublic),
+      iv: new Uint8Array(rekey.iv),
+      ct: new Uint8Array(rekey.ct),
+    })
+    const kpKey = yield* importGroupKey(new Uint8Array(kpRaw))
+
+    // Rewrap K′ under the device's own KEK (same unlock secret + salt as the
+    // method just used). Only that method is kept — it's the only wrap whose
+    // secret is available at background time; the other path can be restored by
+    // re-enrolling.
+    const kek = yield* kekFromPrf(new Uint8Array(cur.unlockSecret), new Uint8Array(cur.unlockSalt))
+    const wrapped = yield* wrapDek(new Uint8Array(kpRaw), kek)
+    const old = env.deks.find((d) => d.method === cur.unlockMethod)
+    const deks = [{
+      method: cur.unlockMethod,
+      salt: cur.unlockSalt.slice().buffer,
+      prfSalt: cur.unlockMethod === 'passkey' ? old?.prfSalt : undefined,
+      credId: cur.unlockMethod === 'passkey' ? old?.credId : undefined,
+      iv: wrapped.iv.slice().buffer,
+      wrapped: wrapped.wrapped.slice().buffer,
+    }]
+    yield* writeDeviceEnvelope(meta.deviceId, { ...env, deks })
+    yield* writeVault(kpKey, meta.deviceId, cur.vault.identities.map((i) => i.id), cur.vault)
+    yield* Ref.set(session, { ...cur, dek: kpKey })
+    return { vault: cur.vault }
+  }),
+
+  revokeDevices: Effect.fn('VaultService.revokeDevices')(function* (args: {
+    identities: readonly Identity[]
+    removedDeviceIds: ReadonlySet<string>
+    remainingEnvelopes: ReadonlyMap<string, GroupEnvelope>
+  }): Effect.fn.Return<
+    {
+      records: Map<string, SyncRecord>
+      rekeys: Map<string, RekeyRecord>
+      hostEnvelope: GroupEnvelope
+    },
+    VaultError
+  > {
+    const cur = yield* Ref.get(session)
+    if (!cur || !cur.unlockSecret || !cur.unlockMethod || !cur.unlockSalt)
+      return yield* new VaultUnlockedError({ message: 'vault locked' })
+    const meta = yield* readMeta()
+    if (!meta?.deviceId) return yield* new VaultUnlockedError({ message: 'no device identity' })
+    const env = yield* readDeviceEnvelope(meta.deviceId)
+    if (!env) return yield* new VaultUnlockedError({ message: 'no envelope' })
+
+    const { raw: kpRaw } = yield* generateGroupKey()
+    const kpKey = yield* importGroupKey(new Uint8Array(kpRaw))
+
+    // Re-encrypt every shared identity under K′.
+    const records = new Map<string, SyncRecord>()
+    for (const identity of args.identities) {
+      const rec = yield* encodeIdentityRecord(kpKey, identity, meta.deviceId)
+      records.set(identity.id, rec)
+    }
+
+    // Rewrap K′ into the host envelope under the in-session unlock.
+    const kek = yield* kekFromPrf(new Uint8Array(cur.unlockSecret), new Uint8Array(cur.unlockSalt))
+    const wrapped = yield* wrapDek(new Uint8Array(kpRaw), kek)
+    const old = env.deks.find((d) => d.method === cur.unlockMethod)
+    const hostDeks = [{
+      method: cur.unlockMethod,
+      salt: cur.unlockSalt.slice().buffer,
+      prfSalt: cur.unlockMethod === 'passkey' ? old?.prfSalt : undefined,
+      credId: cur.unlockMethod === 'passkey' ? old?.credId : undefined,
+      iv: wrapped.iv.slice().buffer,
+      wrapped: wrapped.wrapped.slice().buffer,
+    }]
+    const hostEnvelope: Envelope = { ...env, deks: hostDeks }
+    yield* writeDeviceEnvelope(meta.deviceId, hostEnvelope)
+    const hostDocEnvelope: GroupEnvelope = {
+      v: 2,
+      groupId: env.groupId ?? '',
+      deviceId: meta.deviceId,
+      deks: hostDeks,
+      devicePublic: env.devicePublic ?? new ArrayBuffer(0),
+      deviceSecret: env.deviceSecret ?? [],
+    }
+
+    // Emit a rekey to each remaining (non-host, non-removed) device.
+    const rekeys = new Map<string, RekeyRecord>()
+    for (const [id, gEnv] of args.remainingEnvelopes) {
+      if (id === meta.deviceId || args.removedDeviceIds.has(id)) continue
+      if (gEnv.devicePublic.byteLength === 0) continue
+      const rk = yield* encryptRekey(new Uint8Array(gEnv.devicePublic), new Uint8Array(kpRaw))
+      rekeys.set(id, {
+        v: 1,
+        ephPublic: rk.ephPublic.slice().buffer,
+        iv: rk.iv.slice().buffer,
+        ct: rk.ct.slice().buffer,
+      })
+    }
+
+    // Switch this host to K′ locally (mirror re-encrypted under K′).
+    yield* writeVault(kpKey, meta.deviceId, cur.vault.identities.map((i) => i.id), cur.vault)
+    yield* Ref.set(session, { ...cur, dek: kpKey })
+
+    return { records, rekeys, hostEnvelope: hostDocEnvelope }
   }),
 
   lock: () => Ref.set(session, null),
@@ -465,6 +649,8 @@ export const vaultImpl: VaultService = {
   save: (vault) => service().save(vault),
   joinImport: (joined) => service().joinImport(joined),
   exportGroupKey: () => service().exportGroupKey(),
+  applyRekey: (rekey) => service().applyRekey(rekey),
+  revokeDevices: (args) => service().revokeDevices(args),
   lock: () => service().lock(),
   session: () => service().session(),
 }

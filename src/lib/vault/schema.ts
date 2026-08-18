@@ -90,6 +90,12 @@ export interface WrappedDeK {
 export interface Envelope {
   version: number
   deks: readonly WrappedDeK[]
+  /** GS6: the trust-group id this device belongs to (v2 group envelope). */
+  groupId?: string
+  /** GS6: this device's ECDH public key (so the group can rekey to it). */
+  devicePublic?: ArrayBuffer
+  /** GS6: this device's ECDH private key, wrapped under its own unlock. */
+  deviceSecret?: readonly WrappedDeK[]
 }
 
 /** The mirror's node identity (S6/M3): iroh SecretKey + the persisted vault doc. */
