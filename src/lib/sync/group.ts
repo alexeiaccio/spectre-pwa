@@ -23,6 +23,22 @@ const KEK_SALT_BYTES = 16
 
 export type GroupKey = AesKey
 
+/** Import raw group-key bytes (32) as a non-extractable AES-GCM key. */
+export const importGroupKey = (raw: Uint8Array): Effect.Effect<GroupKey, CryptoError> =>
+  Effect.tryPromise(async () => {
+    if (raw.byteLength !== 32)
+      throw new Error('group key must be 32 bytes')
+    return crypto.subtle.importKey(
+      'raw',
+      toBuf(raw),
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['encrypt', 'decrypt'],
+    )
+  }).pipe(
+    Effect.mapError(() => new CryptoError({ message: 'importGroupKey failed' })),
+  )
+
 /** Generate a fresh random group key plus its raw 32 bytes (wipe after wrapping). */
 export const generateGroupKey = (): Effect.Effect<
   { key: GroupKey; raw: Uint8Array },

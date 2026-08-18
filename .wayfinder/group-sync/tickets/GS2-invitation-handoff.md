@@ -2,9 +2,9 @@
 id: GS2
 title: Invitation handoff
 type: prototype
-status: open
+status: closed
 blocked_by: [GS1]
-assigned:
+assigned: dev
 ---
 
 ## Question
@@ -40,3 +40,26 @@ no host-passphrase prompt, and with reuse/rotation handled.
   the offered identities.
 - A second join with the same invitation is refused (consumed).
 - Only `identityIds` chosen on the host are present in the doc on join.
+
+## Resolution
+
+Closed 2026-08-18. `src/lib/sync/invitation.ts`:
+
+- **Invitation wire format** (`Invitation` + `encodeInvitation`/`decodeInvitation`):
+  `{ v, ticket, groupId, secret (one-time S), share {salt,iv,ct} }` — the
+  invitation carries the doc ticket plus the material to recover K.
+- **`createGroupInvitation`** — host writes a *chosen* identity subset into a
+  fresh doc under K (only the selected ids hit the doc / host pointer), then
+  wraps K under a fresh S and returns the encoded invitation. Doc-capability
+  persistence is an injectable `persist` callback (keeps it testable without
+  the wasm adapter).
+- **`rotateGroupInvitation`** — a fresh S against the same doc/ticket renders a
+  prior invitation non-reusable (one-time semantics).
+- `group.ts` gained `importGroupKey` (import 32 raw bytes → AES key).
+- `tests/unit/invitation-sync.test.ts` (4 tests, via an in-memory adapter):
+  wire round-trip; only chosen identities in the doc + joiner recovers K from
+  the invitation and reads a chosen identity; empty selection rejected; rotation
+  issues a fresh secret and the old S can't unwrap the new material.
+  113/113 green, tsc clean.
+
+GS3 (join) consumes the invitation to recover K and enroll a local passkey.

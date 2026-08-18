@@ -61,6 +61,11 @@ it). This effort is the app-side trust/schema/flow redesign on top.
   the one-time share-secret primitive (recover-K, wrong-S-fails,
   rotation-invalidates-old). Cross-device read under independent unlockers
   tested. Additive; 109/109 green.
+- [GS2 · Invitation handoff](tickets/GS2-invitation-handoff.md) — closed:
+  `invitation.ts` — wire format, `createGroupInvitation` (chosen identities →
+  doc under K → one-time secret S), `rotateGroupInvitation` (fresh S renders the
+  prior invitation non-reusable). Only chosen ids hit the doc; joiner recovers K
+  from the invite. 4 tests; 113/113 green.
 
 ## Not yet specified
 
