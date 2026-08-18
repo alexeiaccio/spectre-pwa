@@ -140,12 +140,35 @@ export const wrapGroupKeyUnderShare = (
     return { salt, iv: wrapped.iv, ct: wrapped.wrapped }
   })
 
-/** Recover K from the invitation share material (GS2). Wrong S fails. */
+/**
+ * Recover the raw group-key bytes from the invitation share material (GS2).
+ * Returns the extractable raw 32 bytes because the joiner must immediately
+ * re-wrap K under its own unlock (`wrapGroupKeyUnder`); the caller wipes them
+ * after wrapping. Wrong S fails (AES-GCM auth).
+ */
 export const unwrapGroupKeyFromShare = (
   shareSecret: Uint8Array,
   material: { salt: Uint8Array; iv: Uint8Array; ct: Uint8Array },
-): Effect.Effect<GroupKey, CryptoError> =>
+): Effect.Effect<Uint8Array, CryptoError> =>
   Effect.gen(function* () {
     const kek = yield* kekFromPrf(shareSecret, material.salt)
-    return yield* unwrapDek(material.ct, kek, material.iv)
+    const raw = yield* unwrapDekRaw(material.ct, kek, material.iv)
+    return raw
   })
+
+/** AES-GCM decrypt to raw bytes (extractable), used only for the share handoff. */
+const unwrapDekRaw = (
+  ct: Uint8Array,
+  kek: AesKey,
+  iv: Uint8Array,
+): Effect.Effect<Uint8Array, CryptoError> =>
+  Effect.tryPromise(async () => {
+    const raw = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv: toBuf(iv) },
+      kek,
+      toBuf(ct),
+    )
+    return new Uint8Array(raw)
+  }).pipe(
+    Effect.mapError(() => new CryptoError({ message: 'unwrap share failed' })),
+  )

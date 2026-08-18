@@ -7,9 +7,19 @@ import {
   encodeInvitation,
   rotateGroupInvitation,
 } from '../../src/lib/sync/invitation.ts'
-import { generateGroupKey, unwrapGroupKeyFromShare } from '../../src/lib/sync/group.ts'
-import { decodeIdentityRecord } from '../../src/lib/sync/records.ts'
-import { HOST_KEY, decodeHostDoc, decodeRecordDoc } from '../../src/lib/sync/types.ts'
+import { consentGroupJoin, decodeIdentityRecord } from '../../src/lib/sync/records.ts'
+import {
+  generateGroupKey,
+  importGroupKey,
+  unwrapGroupKeyFromShare,
+  unwrapGroupKeyLocal,
+} from '../../src/lib/sync/group.ts'
+import {
+  HOST_KEY,
+  decodeHostDoc,
+  decodeRecordDoc,
+  type SyncRecord,
+} from '../../src/lib/sync/types.ts'
 import type { Identity } from '../../src/lib/vault/schema.ts'
 
 const run = <A, E>(e: Effect.Effect<A, E>): Promise<A> => Effect.runPromise(e)
@@ -99,13 +109,14 @@ test('createGroupInvitation shares ONLY the chosen identities, under the group k
   const inv = decodeInvitation(inviteStr)
   expect(inv.groupId).toBe('g1')
   expect(inv.ticket).toBe('ticket-1')
-  const k = await run(
+  const rawK = await run(
     unwrapGroupKeyFromShare(new Uint8Array(inv.secret), {
       salt: new Uint8Array(inv.share.salt),
       iv: new Uint8Array(inv.share.iv),
       ct: new Uint8Array(inv.share.ct),
     }),
   )
+  const k = await run(importGroupKey(rawK))
   const reader = decodeRecordDoc(adapter.store.get('id-1')!)
   const identity = await run(decodeIdentityRecord(k, reader))
   expect(identity.fullName).toBe('Identity 1')
@@ -157,12 +168,77 @@ test('rotateGroupInvitation issues a fresh secret; the old one can no longer unw
   expect((await Effect.runPromiseExit(oldFuture))._tag).toBe('Failure')
 
   // New S works.
-  const ok = await run(
+  const rawOk = await run(
     unwrapGroupKeyFromShare(new Uint8Array(newInv.secret), {
       salt: new Uint8Array(newInv.share.salt),
       iv: new Uint8Array(newInv.share.iv),
       ct: new Uint8Array(newInv.share.ct),
     }),
   )
-  expect(ok.usages?.includes('encrypt')).toBe(true)
+  expect(rawOk.byteLength).toBe(32)
+})
+
+test('consentGroupJoin: joiner recovers the group from the invitation with its OWN passphrase — no host passphrase', async () => {
+  const adapter = new MemoryAdapter()
+  const offered = [id(1), id(2)]
+  const { raw } = await run(generateGroupKey())
+  const inviteStr = await createGroupInvitation({
+    sync: adapter,
+    groupId: 'g1',
+    deviceId: 'host',
+    identities: offered,
+    groupKeyRaw: new Uint8Array(raw),
+  })
+  raw.fill(0)
+
+  // The doc's offered records (the joiner would fetch these via the doc).
+  const hostRecords = new Map<string, SyncRecord>()
+  for (const ent of adapter.store.entries()) {
+    if (ent[0] === HOST_KEY) continue
+    hostRecords.set(ent[0], decodeRecordDoc(ent[1]))
+  }
+
+  const inv = decodeInvitation(inviteStr)
+  // Joiner uses a device passphrase of ITS OWN + its passkey PRF. Crucially,
+  // no host passphrase is provided anywhere.
+  const jPrfSalt = crypto.getRandomValues(new Uint8Array(16))
+  const consent = await run(
+    consentGroupJoin({
+      invitation: inv,
+      hostRecords,
+      deviceId: 'joiner-1',
+      passphrase: 'joiner-own-passphrase',
+      passkeyPrf: new Uint8Array(32).fill(7),
+      passkeyPrfSalt: jPrfSalt,
+      passkeyCredId: 'cred-joiner',
+    }),
+  )
+
+  expect(consent.identities.map((i) => i.id)).toEqual(['id-1', 'id-2'])
+  expect([...consent.records.keys()]).toEqual(['id-1', 'id-2'])
+  expect(consent.envelope.groupId).toBe('g1')
+  expect(consent.envelope.deviceId).toBe('joiner-1')
+  expect(consent.envelope.deks.map((d) => d.method).sort()).toEqual([
+    'passkey',
+    'recovery',
+  ])
+
+  // The adopted group key lets this device read the adopted records
+  // (this is what will open the vault on the joiner).
+  const firstRecord = consent.records.get('id-1')!
+  const read = await run(decodeIdentityRecord(consent.groupKey, firstRecord))
+  expect(read.fullName).toBe('Identity 1')
+
+  // And the joiner can unlock later with its own passphrase: unwrap K from its
+  // own envelope's recovery wrap and read the same record.
+  const rec = consent.envelope.deks.find((d) => d.method === 'recovery')!
+  const kFromOwn = await run(
+    unwrapGroupKeyLocal(
+      consent.envelope,
+      'recovery',
+      new TextEncoder().encode('joiner-own-passphrase'),
+    ),
+  )
+  const read2 = await run(decodeIdentityRecord(kFromOwn, firstRecord))
+  expect(read2.fullName).toBe('Identity 1')
 })

@@ -9,9 +9,15 @@ import {
   wrapDek,
   type AesKey,
 } from '../vault/crypto-dek.ts'
+import {
+  importGroupKey,
+  unwrapGroupKeyFromShare,
+  wrapGroupKeyUnder,
+} from './group.ts'
+import type { Invitation } from './invitation.ts'
 import { IdentitySchema } from '../vault/schema.ts'
 import type { Identity, Vault, WrappedDeK } from '../vault/schema.ts'
-import type { DeviceEnvelope, SyncRecord } from './types.ts'
+import type { DeviceEnvelope, GroupEnvelope, SyncRecord } from './types.ts'
 
 const textEncoder = new TextEncoder()
 const toBuf = (u: Uint8Array): ArrayBuffer => u.slice().buffer
@@ -243,3 +249,75 @@ export const adoptHostCode = Effect.fn('sync.adoptHostCode')(function* (args: {
     identities,
   }
 })
+
+// ---------------------------------------------------------------------------
+// GS3: group-model join consent. The joiner recovers the shared group key K
+// from the invitation (no host passphrase), reads the offered identities, and
+// re-wraps K under its OWN passphrase (+ passkey PRF). Records stay under K,
+// so nothing is re-encrypted on join — the joiner just adopts K + the offered
+// records. The returned group key opens the session on this device.
+// ---------------------------------------------------------------------------
+
+export interface GroupJoinConsent {
+  /** Offered identity records, as received (already encrypted under K). */
+  records: Map<string, SyncRecord>
+  /** K wrapped under this device's passphrase (+ passkey PRF). */
+  envelope: GroupEnvelope
+  /** The offered identities, decrypted under the recovered K. */
+  identities: Identity[]
+  /** The shared group key — this device's session unlock. */
+  groupKey: AesKey
+}
+
+export const consentGroupJoin = Effect.fn('sync.consentGroupJoin')(
+  function* (args: {
+    invitation: Invitation
+    hostRecords: ReadonlyMap<string, SyncRecord>
+    deviceId: string
+    /** A per-device passphrase entered once on THIS device (never the host's). */
+    passphrase: string
+    passkeyPrf?: Uint8Array
+    passkeyPrfSalt?: Uint8Array
+    passkeyCredId?: string
+  }): Effect.fn.Return<GroupJoinConsent, CryptoError> {
+    const raw = yield* unwrapGroupKeyFromShare(
+      new Uint8Array(args.invitation.secret),
+      {
+        salt: new Uint8Array(args.invitation.share.salt),
+        iv: new Uint8Array(args.invitation.share.iv),
+        ct: new Uint8Array(args.invitation.share.ct),
+      },
+    )
+    const groupKey = yield* importGroupKey(new Uint8Array(raw))
+
+    const identities: Identity[] = []
+    const records = new Map<string, SyncRecord>()
+    for (const [id, record] of args.hostRecords) {
+      if (record.kind !== 'record') continue
+      const identity = yield* decodeIdentityRecord(groupKey, record)
+      identities.push(identity)
+      records.set(id, record)
+    }
+
+    const deks = yield* wrapGroupKeyUnder({
+      raw: new Uint8Array(raw),
+      passphrase: args.passphrase,
+      passkeyPrf: args.passkeyPrf,
+      passkeyPrfSalt: args.passkeyPrfSalt,
+      passkeyCredId: args.passkeyCredId,
+    })
+    raw.fill(0)
+
+    return {
+      records,
+      envelope: {
+        v: 2,
+        groupId: args.invitation.groupId,
+        deviceId: args.deviceId,
+        deks,
+      },
+      identities,
+      groupKey,
+    }
+  },
+)

@@ -8,6 +8,7 @@ import {
 import {
   createShareSecret,
   generateGroupKey,
+  importGroupKey,
   unwrapGroupKeyFromShare,
   unwrapGroupKeyLocal,
   wrapGroupKeyUnder,
@@ -125,13 +126,14 @@ test('share secret: recover K with the invitation secret; wrong S fails; rotatio
   const s2 = createShareSecret() // the rotated invitation secret
 
   const mat1 = await run(wrapGroupKeyUnderShare(new Uint8Array(raw), s1))
-  const kFromS1 = await run(
+  const rawFromS1 = await run(
     unwrapGroupKeyFromShare(s1, {
       salt: mat1.salt,
       iv: mat1.iv,
       ct: mat1.ct,
     }),
   )
+  const kFromS1 = await run(importGroupKey(rawFromS1))
   raw.fill(0)
 
   // The invitation material lets the joiner recover K.
@@ -153,9 +155,10 @@ test('share secret: recover K with the invitation secret; wrong S fails; rotatio
 
   // Rotation: host rewraps K under a fresh S2; the old S1 must no longer unlock.
   const mat2 = await run(wrapGroupKeyUnderShare(new Uint8Array(raw), s2))
-  const kFromS2 = await run(
+  const rawFromS2 = await run(
     unwrapGroupKeyFromShare(s2, { salt: mat2.salt, iv: mat2.iv, ct: mat2.ct }),
   )
+  const kFromS2 = await run(importGroupKey(rawFromS2))
   const kFromOldS = await Effect.runPromiseExit(
     unwrapGroupKeyFromShare(s1, { salt: mat2.salt, iv: mat2.iv, ct: mat2.ct }),
   )
