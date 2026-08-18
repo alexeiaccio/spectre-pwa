@@ -2,9 +2,9 @@
 id: GS1
 title: Group key + schema
 type: prototype
-status: open
+status: closed
 blocked_by: []
-assigned:
+assigned: dev
 ---
 
 ## Question
@@ -48,3 +48,26 @@ mirror migration, and the one-time join-secret primitive.
 - A unit test reads a record with a *different* device's local unwrap producing
   the same K (i.e. cross-device read works with no recovery-code exchange).
 - The join-secret primitive: derive→reveal→consume round-trip test.
+
+## Resolution
+
+Closed 2026-08-18. Delivered additively (non-breaking; current flows/tests stay
+green — 109/109, tsc clean).
+
+- `src/lib/sync/group.ts` — the group-key crypto layer: `generateGroupKey`,
+  `wrapGroupKeyUnder` (per-device: passphrase + passkey PRF), `unwrapGroupKeyLocal`
+  (by kind/secret), `createShareSecret`, `wrapGroupKeyUnderShare`,
+  `unwrapGroupKeyFromShare` (the one-time invitation handoff, incl. rotation =
+  rewrap under a fresh S so an old invitation can't reopen K). Reuses the vault's
+  existing `kekFromPrf`/`wrapDek`/`unwrapDek` (K is just an AES key).
+- `types.ts` — `GroupEnvelope` (v2): one device's wraps of shared K under its
+  own passkey + per-device passphrase, plus `encodeGroupEnvelope`/
+  `decodeGroupEnvelope` wire codec.
+- Records are key-agnostic (`encodeIdentityRecord`/`decodeIdentityRecord` take
+  any AES key), so records-under-K needed no change.
+- `tests/unit/group-sync.test.ts` (4 tests): v2 envelope codec; two devices with
+  **independent local unlocks unwrap the same K and read each other's records**
+  (cross-device read, no recovery-code exchange); wrong local secret fails;
+  share-secret recover-K / wrong-S-fails / rotation-invalidates-old-S.
+
+GS2/GS3/GS5 now build on `group.ts` + the v2 envelope.

@@ -52,6 +52,16 @@ it). This effort is the app-side trust/schema/flow redesign on top.
   and both drift onto a single shared K; all become one trust group.
 - Planning-first: tickets below; implement incrementally with tests.
 
+## Decisions so far
+
+<!-- one line per closed ticket -->
+
+- [GS1 · Group key + schema](tickets/GS1-group-key-schema.md) — closed: shared
+  group key K + per-device wraps (`group.ts`), v2 `GroupEnvelope` codec, and
+  the one-time share-secret primitive (recover-K, wrong-S-fails,
+  rotation-invalidates-old). Cross-device read under independent unlockers
+  tested. Additive; 109/109 green.
+
 ## Not yet specified
 
 - [GS1 · Group key + schema](tickets/GS1-group-key-schema.md) — open. K, its

@@ -144,3 +144,57 @@ export const decodeEnvelopeDoc = (s: string): DeviceEnvelope => {
     })),
   }
 }
+
+/**
+ * v2 group envelope (GS1): one device's wraps of the *shared group key* K,
+ * under that device's own passkey + its own per-device passphrase. K is what
+ * encrypts the shared identity records, so any group device can read any
+ * record (periodic sync with no cross-device passphrase).
+ */
+export interface GroupEnvelope {
+  v: 2
+  /** Stable id for the trust group (also the group's key-dedup marker). */
+  groupId: string
+  deviceId: string
+  /** Each entry wraps K (not a per-device DEK). */
+  deks: readonly WrappedDeK[]
+}
+
+const GroupEnvelopeDocSchema = Schema.Struct({
+  v: Schema.Literal(2),
+  groupId: Schema.String,
+  deviceId: Schema.String,
+  deks: Schema.Array(WrappedDeKSchema),
+})
+
+export const encodeGroupEnvelope = (env: GroupEnvelope): string =>
+  Schema.encodeSync(Schema.fromJsonString(GroupEnvelopeDocSchema))({
+    v: 2,
+    groupId: env.groupId,
+    deviceId: env.deviceId,
+    deks: env.deks.map((d) => ({
+      method: d.method,
+      salt: toU8(d.salt),
+      prfSalt: d.prfSalt ? toU8(d.prfSalt) : undefined,
+      credId: d.credId,
+      iv: toU8(d.iv),
+      wrapped: toU8(d.wrapped),
+    })),
+  })
+
+export const decodeGroupEnvelope = (s: string): GroupEnvelope => {
+  const w = Schema.decodeSync(Schema.fromJsonString(GroupEnvelopeDocSchema))(s)
+  return {
+    v: 2,
+    groupId: w.groupId,
+    deviceId: w.deviceId,
+    deks: w.deks.map((d) => ({
+      method: d.method,
+      salt: toBuf(d.salt),
+      prfSalt: d.prfSalt ? toBuf(d.prfSalt) : undefined,
+      credId: d.credId,
+      iv: toBuf(d.iv),
+      wrapped: toBuf(d.wrapped),
+    })),
+  }
+}
