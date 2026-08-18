@@ -84,10 +84,25 @@ it). This effort is the app-side trust/schema/flow redesign on top.
 - [GS5 · Periodic cross-device sync](tickets/GS5-periodic-sync.md) — open
   (blocked by GS1). Read/write all shared records under K on a timer /
   open-app + visibility triggers; sync-status UX.
+- [GS6 · Revoke a device via key rotation](tickets/GS6-revoke-device.md) — open
+  (blocked by GS1, GS5). Real "remove connection": rotate to a new group key
+  epoch K′, re-encrypt all shared records, re-share K′ only to remaining
+  devices. The removed device still holds its old records, but can no longer
+  decrypt new writes. Decision (2026-08-18): real revocation, not UI-only.
+
+## Device-management UI (folds into GS5/GS6, decided 2026-08-18)
+
+Settings gains a **"Paired devices"** section built from the doc's
+`env/<deviceId>` envelope set (free to enumerate). Per device:
+- **Reconnect** — re-establish the sync session / retry (manual trigger).
+- **Resync now** — pull+push under K on demand.
+- **Last synced / status** — from GS5's status UX.
+- **Remove connection** — real revocation (GS6: key rotation), not UI-only.
 
 ## Out of scope
 
 - The relay itself (iroh-worker repo; done and deployed).
 - Per-identity vs group key granularity (decision: group key).
-- Forget-a-device / revocation of a *single* device from the group (requires a
-  new key epoch + re-encrypt; tracked as a later concern, not v1).
+- Revoking a device is *not* out of scope — it is a real, tracked feature
+  (GS6, key rotation). Note the inherent limit: a removed device always keeps
+  the records it already held; rotation stops future reads/writes only.
