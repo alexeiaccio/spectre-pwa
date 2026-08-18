@@ -80,6 +80,8 @@ interface VaultService {
     records: Map<string, SyncRecord>
     dek: AesKey
   }) => Effect.Effect<{ vault: Vault }, VaultError>
+  /** Raw group-key bytes (K, extractable) from the live session — for invitations (GS2/GS3). */
+  exportGroupKey: () => Effect.Effect<Uint8Array, VaultError>
   /** Drop the in-memory session. */
   lock: () => Effect.Effect<void>
   /** The current unlocked session (null when locked). */
@@ -410,10 +412,26 @@ const makeVaultImpl = (
     yield* writeDeviceEnvelope(joined.deviceId, joined.envelope)
     yield* writeRecords(joined.records)
     yield* writeMeta({ deviceId: joined.deviceId })
-    // Load the joined identities back from the records (they are under DEK-B).
+    // Load the joined identities back from the records (they are under K).
     const loaded = yield* loadVault(joined.dek)
     yield* Ref.set(session, { dek: joined.dek, vault: loaded })
     return { vault: loaded }
+  }),
+
+  exportGroupKey: Effect.fn('VaultService.exportGroupKey')(function* (): Effect.fn.Return<
+    Uint8Array,
+    VaultError
+  > {
+    const cur = yield* Ref.get(session)
+    if (!cur) return yield* new VaultUnlockedError({ message: 'vault locked' })
+    const raw = yield* Effect.tryPromise(() =>
+      crypto.subtle.exportKey('raw', cur.dek),
+    ).pipe(
+      Effect.mapError(
+        () => new VaultUnlockedError({ message: 'exportGroupKey failed' }),
+      ),
+    )
+    return new Uint8Array(raw)
   }),
 
   lock: () => Ref.set(session, null),
@@ -446,6 +464,7 @@ export const vaultImpl: VaultService = {
   reEnrollPasskey: (code) => service().reEnrollPasskey(code),
   save: (vault) => service().save(vault),
   joinImport: (joined) => service().joinImport(joined),
+  exportGroupKey: () => service().exportGroupKey(),
   lock: () => service().lock(),
   session: () => service().session(),
 }

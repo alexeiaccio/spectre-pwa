@@ -32,11 +32,13 @@ export interface DekAndRaw {
 export const generateDek = (): Effect.Effect<DekAndRaw, CryptoError> =>
   Effect.tryPromise(async () => {
     const raw = crypto.getRandomValues(new Uint8Array(32))
+    // Extractable: this is the group/session key K, and the host must be able
+    // to export its raw bytes to create/rotate invitations (GS3 decision).
     const key = await crypto.subtle.importKey(
       'raw',
       toBuf(raw),
       { name: 'AES-GCM', length: 256 },
-      false,
+      true,
       ['encrypt', 'decrypt'],
     )
     return { key, raw }
@@ -114,11 +116,13 @@ export const unwrapDek = (
       kek,
       toBuf(wrapped),
     )
+    // Extractable: the vault key is the group key K, which the host exports to
+    // create/rotate invitations (GS3 decision).
     return crypto.subtle.importKey(
       'raw',
       raw,
       { name: 'AES-GCM', length: 256 },
-      false,
+      true,
       ['encrypt', 'decrypt'],
     )
   }).pipe(

@@ -23,7 +23,7 @@ const KEK_SALT_BYTES = 16
 
 export type GroupKey = AesKey
 
-/** Import raw group-key bytes (32) as a non-extractable AES-GCM key. */
+/** Import raw group-key bytes (32) as an extractable AES-GCM key (host exports it for invitations). */
 export const importGroupKey = (raw: Uint8Array): Effect.Effect<GroupKey, CryptoError> =>
   Effect.tryPromise(async () => {
     if (raw.byteLength !== 32)
@@ -32,7 +32,7 @@ export const importGroupKey = (raw: Uint8Array): Effect.Effect<GroupKey, CryptoE
       'raw',
       toBuf(raw),
       { name: 'AES-GCM', length: 256 },
-      false,
+      true,
       ['encrypt', 'decrypt'],
     )
   }).pipe(
