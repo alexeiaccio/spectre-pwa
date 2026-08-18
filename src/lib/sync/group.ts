@@ -23,6 +23,138 @@ const KEK_SALT_BYTES = 16
 
 export type GroupKey = AesKey
 
+/** ECDH P-256 keypair, extractable so we can store + re-derive later. */
+export const generateDeviceKeypair = (): Effect.Effect<
+  { publicRaw: Uint8Array; privatePkcs8: Uint8Array },
+  CryptoError
+> =>
+  Effect.tryPromise(async () => {
+    const kp = await crypto.subtle.generateKey(
+      { name: 'ECDH', namedCurve: 'P-256' },
+      true,
+      ['deriveBits'],
+    )
+    const publicRaw = new Uint8Array(
+      await crypto.subtle.exportKey('raw', kp.publicKey),
+    )
+    const privatePkcs8 = new Uint8Array(
+      await crypto.subtle.exportKey('pkcs8', kp.privateKey),
+    )
+    return { publicRaw, privatePkcs8 }
+  }).pipe(
+    Effect.mapError(
+      () => new CryptoError({ message: 'generateDeviceKeypair failed' }),
+    ),
+  )
+
+/** Derive a shared AES-GCM key from a device private + a peer's public key. */
+export const deriveSharedKey = (
+  privatePkcs8: Uint8Array,
+  peerPublicRaw: Uint8Array,
+): Effect.Effect<AesKey, CryptoError> =>
+  Effect.tryPromise(async () => {
+    const priv = await crypto.subtle.importKey(
+      'pkcs8',
+      toBuf(privatePkcs8),
+      { name: 'ECDH', namedCurve: 'P-256' },
+      false,
+      ['deriveBits'],
+    )
+    const pub = await crypto.subtle.importKey(
+      'raw',
+      toBuf(peerPublicRaw),
+      { name: 'ECDH', namedCurve: 'P-256' },
+      false,
+      [],
+    )
+    const bits = new Uint8Array(
+      await crypto.subtle.deriveBits({ name: 'ECDH', public: pub }, priv, 256),
+    )
+    // Derive an AES key from the shared bits so a rekey payload is small and
+    // a fresh salt/AES key per record keeps the ciphertext independent.
+    return crypto.subtle.importKey(
+      'raw',
+      toBuf(bits),
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['encrypt', 'decrypt'],
+    )
+  }).pipe(
+    Effect.mapError(() => new CryptoError({ message: 'ECDH derive failed' })),
+  )
+
+/** GS6: encrypt the new group key K′ to a target device (ephemeral ECDH). */
+export const encryptRekey = (
+  targetPublicRaw: Uint8Array,
+  kPrimeRaw: Uint8Array,
+): Effect.Effect<
+  { ephPublic: Uint8Array; iv: Uint8Array; ct: Uint8Array },
+  CryptoError
+> =>
+  Effect.gen(function* () {
+    const { publicRaw: ephPublic, privatePkcs8: ephPrivate } =
+      yield* generateDeviceKeypair()
+    const shared = yield* deriveSharedKey(ephPrivate, targetPublicRaw)
+    const iv = crypto.getRandomValues(new Uint8Array(12))
+    const ct = yield* Effect.tryPromise(async () =>
+      new Uint8Array(
+        await crypto.subtle.encrypt(
+          { name: 'AES-GCM', iv: toBuf(iv) },
+          shared,
+          toBuf(kPrimeRaw),
+        ),
+      ),
+    ).pipe(
+      Effect.mapError(() => new CryptoError({ message: 'rekey encrypt failed' })),
+    )
+    return { ephPublic, iv, ct }
+  })
+
+/** GS6: decrypt a rekey record addressed to this device → raw K′. */
+export const decryptRekey = (
+  privatePkcs8: Uint8Array,
+  rekey: { ephPublic: Uint8Array; iv: Uint8Array; ct: Uint8Array },
+): Effect.Effect<Uint8Array, CryptoError> =>
+  Effect.gen(function* () {
+    const shared = yield* deriveSharedKey(privatePkcs8, rekey.ephPublic)
+    const raw = yield* Effect.tryPromise(async () =>
+      new Uint8Array(
+        await crypto.subtle.decrypt(
+          { name: 'AES-GCM', iv: toBuf(rekey.iv) },
+          shared,
+          toBuf(rekey.ct),
+        ),
+      ),
+    ).pipe(
+      Effect.mapError(() => new CryptoError({ message: 'rekey decrypt failed' })),
+    )
+    return raw
+  })
+
+/** Unwrap a `WrappedDeK` block to raw bytes (not an AES key) with a secret. */
+export const unwrapRawSecret = (
+  wraps: readonly WrappedDeK[],
+  kind: 'recovery' | 'passkey',
+  secret: Uint8Array,
+): Effect.Effect<Uint8Array, CryptoError> =>
+  Effect.gen(function* () {
+    const rec = wraps.find((d) => d.method === kind)
+    if (!rec)
+      return yield* new CryptoError({ message: `no ${kind} wrap` })
+    const kek = yield* kekFromPrf(secret, new Uint8Array(rec.salt))
+    const raw = yield* Effect.tryPromise(async () => {
+      const pt = await crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv: toBuf(new Uint8Array(rec.iv)) },
+        kek,
+        toBuf(new Uint8Array(rec.wrapped)),
+      )
+      return new Uint8Array(pt)
+    }).pipe(
+      Effect.mapError(() => new CryptoError({ message: 'unwrap raw failed' })),
+    )
+    return raw
+  })
+
 /** Import raw group-key bytes (32) as an extractable AES-GCM key (host exports it for invitations). */
 export const importGroupKey = (raw: Uint8Array): Effect.Effect<GroupKey, CryptoError> =>
   Effect.tryPromise(async () => {

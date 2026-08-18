@@ -43,6 +43,16 @@ test('group envelope round-trips through the JSON wire format (v2)', () => {
         wrapped: new Uint8Array(32).buffer as ArrayBuffer,
       },
     ],
+    // GS6: device ECDH keypair wired into the envelope.
+    devicePublic: new Uint8Array(65).buffer as ArrayBuffer,
+    deviceSecret: [
+      {
+        method: 'recovery',
+        salt: new Uint8Array(16).buffer as ArrayBuffer,
+        iv: new Uint8Array(12).buffer as ArrayBuffer,
+        wrapped: new Uint8Array(32).buffer as ArrayBuffer,
+      },
+    ],
   }
   const decoded = decodeGroupEnvelope(encodeGroupEnvelope(env))
   expect(decoded.v).toBe(2)
@@ -50,6 +60,8 @@ test('group envelope round-trips through the JSON wire format (v2)', () => {
   expect(decoded.deviceId).toBe('dev-a')
   expect(decoded.deks).toHaveLength(1)
   expect(decoded.deks[0].method).toBe('recovery')
+  expect(decoded.devicePublic).toEqual(env.devicePublic)
+  expect(decoded.deviceSecret).toHaveLength(1)
 })
 
 test('devices with independent local unlocks unwrap the SAME group key and read each other\'s records', async () => {

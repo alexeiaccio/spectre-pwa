@@ -10,6 +10,7 @@ import {
   type AesKey,
 } from '../vault/crypto-dek.ts'
 import {
+  generateDeviceKeypair,
   importGroupKey,
   unwrapGroupKeyFromShare,
   wrapGroupKeyUnder,
@@ -21,6 +22,7 @@ import type { DeviceEnvelope, GroupEnvelope, SyncRecord } from './types.ts'
 
 const textEncoder = new TextEncoder()
 const toBuf = (u: Uint8Array): ArrayBuffer => u.slice().buffer
+const toBufU8 = (u: Uint8Array): ArrayBuffer => u.slice().buffer
 const KEK_SALT_BYTES = 16
 
 /**
@@ -299,8 +301,18 @@ export const consentGroupJoin = Effect.fn('sync.consentGroupJoin')(
       records.set(id, record)
     }
 
+    // GS6: mint this device's ECDH keypair so the group can rekey to it later.
+    const device = yield* generateDeviceKeypair()
+
     const deks = yield* wrapGroupKeyUnder({
       raw: new Uint8Array(raw),
+      passphrase: args.passphrase,
+      passkeyPrf: args.passkeyPrf,
+      passkeyPrfSalt: args.passkeyPrfSalt,
+      passkeyCredId: args.passkeyCredId,
+    })
+    const deviceSecret = yield* wrapGroupKeyUnder({
+      raw: new Uint8Array(device.privatePkcs8),
       passphrase: args.passphrase,
       passkeyPrf: args.passkeyPrf,
       passkeyPrfSalt: args.passkeyPrfSalt,
@@ -315,6 +327,8 @@ export const consentGroupJoin = Effect.fn('sync.consentGroupJoin')(
         groupId: args.invitation.groupId,
         deviceId: args.deviceId,
         deks,
+        devicePublic: toBufU8(device.publicRaw),
+        deviceSecret,
       },
       identities,
       groupKey,

@@ -41,3 +41,35 @@ Real revocation = **rotate to a new group key epoch K′** and re-encrypt.
   device list / envelope set.
 - Remaining devices converge on K′ and read each other's re-encrypted records.
 - Epoch mismatch on a stale mirror surfaces clearly (status UX, GS5).
+
+## Progress (2026-08-18) — mechanism implemented + tested; integration remains
+
+**Done + tested (crypto core):**
+- Each device mints an **ECDH (P-256) keypair** at join (`consentGroupJoin`);
+  `GroupEnvelope` carries `devicePublic` (plaintext) + `deviceSecret` (ECDH
+  private pkcs8 DER wrapped under the device's own unlock). `group.ts`:
+  `generateDeviceKeypair`, `deriveSharedKey`, `encryptRekey`, `decryptRekey`,
+  `unwrapRawSecret`.
+- `rotation.ts`:
+  - `rotateGroupKey` (host): generate K′, re-encrypt all shared records under
+    it, rewrap K′ into the host's envelope, and emit a per-device
+    `rekey/<deviceId>` record (K′ ECDH-encrypted to each *remaining* device).
+  - `consumeRekey` (device): unwrap own `deviceSecret`, ECDH-decrypt the
+    rekey → K′ → rewrap under its own unlock.
+- `types.ts`: `RekeyRecord` + `rekeyKey(deviceId)` doc keys.
+- `tests/unit/rotation-sync.test.ts` (3): rekey goes only to remaining
+  devices (not the removed one); a removed device can't decrypt a remaining
+  device's rekey; a removed device holding the old K can't read post-rotation
+  records. 123/123 green, tsc clean.
+
+**Still needed for a complete GS6 (integration/UI):**
+1. **Session device-key holder**: hold the device ECDH private in the unlocked
+   `VaultSession` (unlock unwraps `deviceSecret` alongside K) so the background
+   runner can auto-consume `rekey/<thisDevice>` without re-prompting.
+2. **Host "Remove connection" action** (settings paired-devices list): calls
+   `rotateGroupKey` with the removed ids, writes `records` + rekeys +
+   `hostEnvelope` to the doc.
+3. **Runner wiring**: on each sync pass, check `rekey/<thisDeviceId>`, consume,
+   switch the session to K′ (and re-import mirror records under K′).
+These are the wired flok; the revocation guarantee is proven at the crypto
+layer above.

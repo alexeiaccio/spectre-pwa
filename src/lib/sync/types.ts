@@ -150,14 +150,24 @@ export const decodeEnvelopeDoc = (s: string): DeviceEnvelope => {
  * under that device's own passkey + its own per-device passphrase. K is what
  * encrypts the shared identity records, so any group device can read any
  * record (periodic sync with no cross-device passphrase).
+ *
+ * GS6 (revocation): each device also carries an ECDH (P-256) keypair.
+ * `devicePublic` (plaintext) lets other group members encrypt a *rekey*
+ * payload — the new group key K′ after a rotation — to this device;
+ * `deviceSecret` is that ECDH private key wrapped under THIS device's own
+ * unlock, so only the device can decrypt rekeys meant for it.
  */
 export interface GroupEnvelope {
   v: 2
-  /** Stable id for the trust group (also the group's key-dedup marker). */
+  /** Stable id for the trust group. */
   groupId: string
   deviceId: string
   /** Each entry wraps K (not a per-device DEK). */
   deks: readonly WrappedDeK[]
+  /** This device's ECDH P-256 public key (raw uncompressed point, plaintext). */
+  devicePublic: ArrayBuffer
+  /** This device's ECDH private key, wrapped under its own unlock. */
+  deviceSecret: readonly WrappedDeK[]
 }
 
 const GroupEnvelopeDocSchema = Schema.Struct({
@@ -165,6 +175,8 @@ const GroupEnvelopeDocSchema = Schema.Struct({
   groupId: Schema.String,
   deviceId: Schema.String,
   deks: Schema.Array(WrappedDeKSchema),
+  devicePublic: Bytes,
+  deviceSecret: Schema.Array(WrappedDeKSchema),
 })
 
 export const encodeGroupEnvelope = (env: GroupEnvelope): string =>
@@ -173,6 +185,15 @@ export const encodeGroupEnvelope = (env: GroupEnvelope): string =>
     groupId: env.groupId,
     deviceId: env.deviceId,
     deks: env.deks.map((d) => ({
+      method: d.method,
+      salt: toU8(d.salt),
+      prfSalt: d.prfSalt ? toU8(d.prfSalt) : undefined,
+      credId: d.credId,
+      iv: toU8(d.iv),
+      wrapped: toU8(d.wrapped),
+    })),
+    devicePublic: toU8(env.devicePublic),
+    deviceSecret: env.deviceSecret.map((d) => ({
       method: d.method,
       salt: toU8(d.salt),
       prfSalt: d.prfSalt ? toU8(d.prfSalt) : undefined,
@@ -196,5 +217,57 @@ export const decodeGroupEnvelope = (s: string): GroupEnvelope => {
       iv: toBuf(d.iv),
       wrapped: toBuf(d.wrapped),
     })),
+    devicePublic: toBuf(w.devicePublic),
+    deviceSecret: w.deviceSecret.map((d) => ({
+      method: d.method,
+      salt: toBuf(d.salt),
+      prfSalt: d.prfSalt ? toBuf(d.prfSalt) : undefined,
+      credId: d.credId,
+      iv: toBuf(d.iv),
+      wrapped: toBuf(d.wrapped),
+    })),
   }
 }
+
+/**
+ * GS6 rekey record (one per remaining device, key `rekey/<deviceId>` in the
+ * doc): the new group key K′ after a rotation, ECDH-encrypted to that device's
+ * `devicePublic`. Only the intended device (holding `deviceSecret`) can decrypt
+ * it, so a removed device that received no rekey is locked out of K′.
+ */
+export interface RekeyRecord {
+  v: 1
+  /** ECDH P-256 ephemeral public key used for this record. */
+  ephPublic: ArrayBuffer
+  /** AES key-wrapped K′ (GCM, iv+ct) under the derived shared secret. */
+  iv: ArrayBuffer
+  ct: ArrayBuffer
+}
+
+const RekeyDocSchema = Schema.Struct({
+  v: Schema.Literal(1),
+  ephPublic: Bytes,
+  iv: Bytes,
+  ct: Bytes,
+})
+
+export const encodeRekeyDoc = (r: RekeyRecord): string =>
+  Schema.encodeSync(Schema.fromJsonString(RekeyDocSchema))({
+    v: 1,
+    ephPublic: toU8(r.ephPublic),
+    iv: toU8(r.iv),
+    ct: toU8(r.ct),
+  })
+
+export const decodeRekeyDoc = (s: string): RekeyRecord => {
+  const w = Schema.decodeSync(Schema.fromJsonString(RekeyDocSchema))(s)
+  return {
+    v: 1,
+    ephPublic: toBuf(w.ephPublic),
+    iv: toBuf(w.iv),
+    ct: toBuf(w.ct),
+  }
+}
+
+/** Doc key for a device's rekey record (GS6). */
+export const rekeyKey = (deviceId: string): string => `rekey/${deviceId}`
