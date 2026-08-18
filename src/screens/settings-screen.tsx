@@ -1,4 +1,5 @@
 import { createEffect, createSignal, onCleanup, Show } from 'solid-js'
+import { Effect } from 'effect'
 import {
   Button,
   Card,
@@ -8,8 +9,10 @@ import {
   Select,
 } from '../components/ui/index.ts'
 import { useScreen } from '../lib/flow.ts'
-import { getSyncAdapter } from '../lib/sync/adapter.ts'
-import { shareVaultDoc } from '../lib/sync/pairing.ts'
+import { getSyncAdapter, persistDoc } from '../lib/sync/adapter.ts'
+import { createGroupInvitation } from '../lib/sync/invitation.ts'
+import { readMeta } from '../lib/vault/storage.ts'
+import { vaultImpl } from '../lib/vault/service.ts'
 
 interface AutoLockOption {
   value: number
@@ -23,6 +26,13 @@ const AUTO_LOCK_OPTIONS: AutoLockOption[] = [
   { value: 15, label: '15 minutes' },
   { value: 60, label: '1 hour' },
 ]
+
+/** Stable group id derived from the shared group key K (all devices agree). */
+const groupIdOf = async (rawK: Uint8Array): Promise<string> => {
+  const digest = await crypto.subtle.digest('SHA-256', rawK.slice().buffer)
+  const bytes = new Uint8Array(digest).slice(0, 16)
+  return [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('')
+}
 
 /** `/settings` — vault settings: re-enroll, auto-lock, sync/pairing. */
 export default function SettingsScreen() {
@@ -67,8 +77,22 @@ export default function SettingsScreen() {
     setPairing(true)
     setPairError(null)
     try {
-      const ticket = await shareVaultDoc(getSyncAdapter())
-      setInvitation(ticket)
+      const sync = getSyncAdapter()
+      const raw = await Effect.runPromise(vaultImpl.exportGroupKey())
+      const session = await Effect.runPromise(vaultImpl.session())
+      if (!session) throw new Error('vault locked')
+      const meta = await Effect.runPromise(readMeta())
+      if (!meta?.deviceId) throw new Error('no device identity')
+      const groupId = await groupIdOf(new Uint8Array(raw))
+      const invitation = await createGroupInvitation({
+        sync,
+        groupId,
+        deviceId: meta.deviceId,
+        identities: session.vault.identities,
+        groupKeyRaw: new Uint8Array(raw),
+        persist: (t, docId) => persistDoc(t, docId),
+      })
+      setInvitation(invitation)
     } catch (e) {
       setPairError(e instanceof Error ? e.message : String(e))
     } finally {

@@ -19,33 +19,24 @@ import {
   persistDoc,
 } from '../lib/sync/adapter.ts'
 import type { SyncAdapter } from '../lib/sync/adapter.ts'
+import { decodeInvitation } from '../lib/sync/invitation.ts'
 import {
-  adoptHostCode,
-  reencryptUnderDekB,
-  verifyRecoveryCode,
+  consentGroupJoin,
+  encodeIdentityRecord,
 } from '../lib/sync/records.ts'
 import {
   HOST_KEY,
-  decodeEnvelopeDoc,
   decodeHostDoc,
   decodeRecordDoc,
-  encodeEnvelopeDoc,
+  encodeGroupEnvelope,
   encodeRecordDoc,
   envelopeKey,
-  type DeviceEnvelope,
   type SyncRecord,
 } from '../lib/sync/types.ts'
-import { readDeviceEnvelope, readMeta } from '../lib/vault/storage.ts'
-import { vaultImpl } from '../lib/vault/service.ts'
-import { createPasskeyWithPrf, getPrfOutput } from '../lib/vault/passkey.ts'
+import { createPasskeyWithPrf, isPrfUnavailable } from '../lib/vault/passkey.ts'
+import type { Identity } from '../lib/vault/schema.ts'
 
-type JoinStep =
-  | 'unlock'
-  | 'invite'
-  | 'syncing'
-  | 'recovery'
-  | 'enrolling'
-  | 'adopting'
+type JoinStep = 'unlock' | 'invite' | 'syncing' | 'setkey'
 
 /**
  * Poll `fn` until it returns a value, the Effect `Clock` passes the deadline,
@@ -75,21 +66,22 @@ export default function JoinScreen() {
   const [inviteMode, setInviteMode] = createSignal<'paste' | 'scan' | 'image'>(
     'paste',
   )
-  const [ticket, setTicket] = createSignal('')
-  const [code, setCode] = createSignal('')
+  const [invitation, setInvitation] = createSignal('')
   const [localCode, setLocalCode] = createSignal('')
+  // The joiner's OWN per-device passphrase (never the host's).
+  const [passphrase, setPassphrase] = createSignal('')
   const [error, setError] = createSignal<string | null>(null)
   const [busy, setBusy] = createSignal(false)
   const [diag, setDiag] = createSignal<string[]>([])
 
-  // A device that already has a vault joins by adopting the host's code.
+  // A device that already has its own vault unlocks it locally first; its
+  // identities merge into the group (union) on join (GS3).
   const existingVault = (): boolean =>
     api.vault.status().kind === 'locked' ||
     api.vault.status().kind === 'unlocked'
 
   let sync: SyncAdapter | null = null
   let docId = ''
-  let hostEnvelope: DeviceEnvelope | null = null
   let hostRecords = new Map<string, SyncRecord>()
 
   const unlockLocal = async (
@@ -116,10 +108,12 @@ export default function JoinScreen() {
   const startJoin = async (): Promise<void> => {
     setError(null)
     setDiag([])
-    if (!ticket().trim()) return
+    if (!invitation().trim()) return
     setBusy(true)
     setStep('syncing')
     try {
+      // The invitation now carries the doc ticket + the one-time share secret.
+      const inv = decodeInvitation(invitation().trim())
       const adapter = getSyncAdapter()
       sync = adapter
       try {
@@ -131,13 +125,13 @@ export default function JoinScreen() {
       }
       let joined: { docId: string }
       try {
-        joined = await adapter.joinDoc(ticket().trim())
+        joined = await adapter.joinDoc(inv.ticket)
       } catch (e) {
         throw new SyncUnavailableError({
           message: `could not join the sync doc — is the relay reachable? (${e instanceof Error ? e.message : String(e)})`,
         })
       }
-      await persistDoc(ticket().trim(), joined.docId)
+      await persistDoc(inv.ticket, joined.docId)
       docId = joined.docId
       // Experimental sync may deliver slowly (or not at all) — poll with a
       // generous window and surface the state rather than hard-failing.
@@ -151,15 +145,6 @@ export default function JoinScreen() {
             'no data from the host yet — is the other device online and did it share an invitation? (experimental sync)',
         })
       const host = decodeHostDoc(hostStr)
-      const envStr = await waitForValue(
-        () => adapter.get(docId, envelopeKey(host.deviceId)),
-        15_000,
-      )
-      if (!envStr)
-        throw new SyncUnavailableError({
-          message: 'host envelope not found (experimental sync)',
-        })
-      hostEnvelope = decodeEnvelopeDoc(envStr)
       for (const id of host.identityIds) {
         const recStr = await adapter.get(docId, id)
         if (recStr) hostRecords.set(id, decodeRecordDoc(recStr))
@@ -168,7 +153,90 @@ export default function JoinScreen() {
         throw new SyncUnavailableError({
           message: 'no identity records from the host yet',
         })
-      setStep('recovery')
+      setStep('setkey')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // Finish the join: enter a per-device passphrase (own, not the host's),
+  // recover the group key from the invitation, adopt/merge the identities.
+  const finish = async (): Promise<void> => {
+    if (!sync || !docId || !invitation().trim()) return
+    setError(null)
+    setBusy(true)
+    try {
+      const inv = decodeInvitation(invitation().trim())
+      let passkey: { prf?: Uint8Array; prfSalt?: Uint8Array; credId?: string } =
+        {}
+      const prfSalt = crypto.getRandomValues(new Uint8Array(32))
+      try {
+        const { credId, prfOutput } = await Effect.runPromise(
+          createPasskeyWithPrf(prfSalt),
+        )
+        passkey = { prf: prfOutput, prfSalt, credId }
+      } catch (e) {
+        // No PRF-capable authenticator — the per-device passphrase suffices
+        // (wraps K under the recovery method alone).
+        if (!isPrfUnavailable(e)) throw e
+      }
+      const deviceId = crypto.randomUUID()
+
+      const consent = await Effect.runPromise(
+        consentGroupJoin({
+          invitation: inv,
+          hostRecords,
+          deviceId,
+          passphrase: passphrase(),
+          passkeyPrf: passkey.prf,
+          passkeyPrfSalt: passkey.prfSalt,
+          passkeyCredId: passkey.credId,
+        }),
+      )
+
+      // Merge: an existing vault keeps its local identities (re-encrypted under
+      // K) and adopts the group's; a fresh join takes the offered identities.
+      const merged = new Map<string, Identity>()
+      if (existingVault()) {
+        const cur = api.vault.status()
+        if (cur.kind === 'unlocked') {
+          for (const i of cur.vault.identities) merged.set(i.id, i)
+        }
+      }
+      for (const i of consent.identities) {
+        if (!merged.has(i.id)) merged.set(i.id, i)
+      }
+
+      // Records the group shares: offered ones (already under K) + this
+      // device's local identities (re-encrypted under K).
+      const records = new Map(consent.records)
+      for (const [id, identity] of merged) {
+        const rec = await Effect.runPromise(
+          encodeIdentityRecord(consent.groupKey, identity, deviceId),
+        )
+        records.set(id, rec)
+      }
+      // Publish this device's group envelope + records so the group sees it.
+      await sync.set(
+        docId,
+        envelopeKey(deviceId),
+        encodeGroupEnvelope(consent.envelope),
+      )
+      for (const [id, rec] of records) {
+        await sync.set(docId, id, encodeRecordDoc(rec))
+      }
+
+      // Complete locally: adopt the group envelope + records + K.
+      const result = await api.vault.importJoined({
+        deviceId,
+        envelope: { version: 2, deks: consent.envelope.deks },
+        records,
+        dek: consent.groupKey,
+      })
+      if (!result) setError('could not save the joined vault')
+      else navigate('/')
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -177,9 +245,7 @@ export default function JoinScreen() {
   }
 
   // Poll iroh connection diagnostics (spike-style) while on the invite or
-  // syncing step: relay / node / doc sync / peers. Pre-warms the node (wasm +
-  // relay dial) so the connection info shows before joining and the join is
-  // fast.
+  // syncing step: relay / node / doc sync / peers.
   createEffect(
     () => step() === 'invite' || step() === 'syncing',
     (active) => {
@@ -210,134 +276,6 @@ export default function JoinScreen() {
     },
   )
 
-  const submitCode = async (): Promise<void> => {
-    if (!hostEnvelope) return
-    setError(null)
-    setBusy(true)
-    try {
-      const ok = await Effect.runPromise(
-        verifyRecoveryCode(hostEnvelope, code()),
-      )
-      if (!ok) {
-        setError('wrong recovery code')
-        return
-      }
-      // A's code verified → fresh installs enroll a new passkey; existing
-      // vaults adopt A's code by rotating their DEK under B's own passkey.
-      setStep(existingVault() ? 'adopting' : 'enrolling')
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const enrollAndFinish = async (): Promise<void> => {
-    if (!hostEnvelope || !sync || !docId) return
-    setError(null)
-    setBusy(true)
-    try {
-      // Fresh join: enroll this device's passkey so DEK-B gets its wrap too.
-      const prfSalt = crypto.getRandomValues(new Uint8Array(32))
-      const { credId, prfOutput } = await Effect.runPromise(
-        createPasskeyWithPrf(prfSalt),
-      )
-      const deviceId = crypto.randomUUID()
-      const joined = await Effect.runPromise(
-        reencryptUnderDekB({
-          hostEnvelope,
-          hostRecords,
-          recoveryCode: code(),
-          deviceId,
-          passkeyPrf: prfOutput,
-          passkeyPrfSalt: prfSalt,
-          passkeyCredId: credId,
-        }),
-      )
-      // Write B's records + envelope into the doc (last writer = B).
-      for (const [id, rec] of joined.records) {
-        await sync.set(docId, id, encodeRecordDoc(rec))
-      }
-      await sync.set(
-        docId,
-        envelopeKey(deviceId),
-        encodeEnvelopeDoc(joined.envelope),
-      )
-      // Complete locally: adopt the joined records + envelope under DEK-B.
-      const result = await api.vault.importJoined({
-        deviceId: joined.envelope.deviceId,
-        envelope: { version: 1, deks: joined.envelope.deks },
-        records: joined.records,
-        dek: joined.dek,
-      })
-      if (!result) setError('could not save the joined vault')
-      else navigate('/') // route to / (identities) — the router takes over
-      // On success the vault status becomes unlocked and the router takes over.
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const adoptAndFinish = async (): Promise<void> => {
-    if (!hostEnvelope || !sync || !docId) return
-    setError(null)
-    setBusy(true)
-    try {
-      // Existing-vault join (S5 adopt-the-code): B keeps its identities, adopts
-      // A's recovery code, and rotates its DEK under B's own passkey.
-      const meta = await Effect.runPromise(readMeta())
-      if (!meta?.deviceId)
-        throw new SyncUnavailableError({ message: 'no device identity' })
-      const localEnvelope = await Effect.runPromise(
-        readDeviceEnvelope(meta.deviceId),
-      )
-      if (!localEnvelope)
-        throw new SyncUnavailableError({ message: 'no local envelope' })
-      const session = await Effect.runPromise(vaultImpl.session())
-      if (!session) throw new SyncUnavailableError({ message: 'vault locked' })
-      const passkeyRec = localEnvelope.deks.find((d) => d.method === 'passkey')
-      if (!passkeyRec?.prfSalt || !passkeyRec.credId)
-        throw new SyncUnavailableError({ message: 'no passkey record' })
-      const { prfOutput } = await Effect.runPromise(
-        getPrfOutput(new Uint8Array(passkeyRec.prfSalt), passkeyRec.credId),
-      )
-      const joined = await Effect.runPromise(
-        adoptHostCode({
-          hostEnvelope,
-          hostRecords,
-          hostCode: code(),
-          localVault: session.vault,
-          deviceId: meta.deviceId,
-          passkeyPrf: prfOutput,
-          passkeyPrfSalt: new Uint8Array(passkeyRec.prfSalt),
-          passkeyCredId: passkeyRec.credId,
-        }),
-      )
-      for (const [id, rec] of joined.records) {
-        await sync.set(docId, id, encodeRecordDoc(rec))
-      }
-      await sync.set(
-        docId,
-        envelopeKey(meta.deviceId),
-        encodeEnvelopeDoc(joined.envelope),
-      )
-      const result = await api.vault.importJoined({
-        deviceId: meta.deviceId,
-        envelope: { version: 1, deks: joined.envelope.deks },
-        records: joined.records,
-        dek: joined.dek,
-      })
-      if (!result) setError('could not save the joined vault')
-      else navigate('/') // route to / (identities)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-    } finally {
-      setBusy(false)
-    }
-  }
-
   return (
     <div data-screen="join" class="flex flex-col gap-4">
       <div class="flex items-center justify-between">
@@ -352,9 +290,8 @@ export default function JoinScreen() {
 
       <Show when={api.vault.status().kind === 'locked'}>
         <Hint>
-          This device already has a vault — joining adopts the other device's
-          recovery code; this vault's identities merge in (your old code stops
-          working).
+          This device has its own vault — joining keeps your identities and
+          merges in the shared ones (your device's unlock stays yours).
         </Hint>
       </Show>
       <Show when={SYNC_EXPERIMENTAL}>
@@ -445,7 +382,7 @@ export default function JoinScreen() {
         <Show when={inviteMode() === 'scan'}>
           <QrScanner
             onScan={(text) => {
-              setTicket(text)
+              setInvitation(text)
               void startJoin()
             }}
           />
@@ -453,7 +390,7 @@ export default function JoinScreen() {
         <Show when={inviteMode() === 'image'}>
           <QrImagePicker
             onScan={(text) => {
-              setTicket(text)
+              setInvitation(text)
               void startJoin()
             }}
           />
@@ -468,13 +405,17 @@ export default function JoinScreen() {
           >
             <Textarea
               label="Invitation string"
-              value={ticket()}
+              value={invitation()}
               onInput={(e) =>
-                setTicket((e.target as HTMLTextAreaElement).value)
+                setInvitation((e.target as HTMLTextAreaElement).value)
               }
               placeholder="invitation string"
             />
-            <Button variant="primary" type="submit" disabled={!ticket().trim()}>
+            <Button
+              variant="primary"
+              type="submit"
+              disabled={!invitation().trim()}
+            >
               Join
             </Button>
           </form>
@@ -500,48 +441,38 @@ export default function JoinScreen() {
         </Button>
       </Show>
 
-      <Show when={step() === 'recovery'}>
+      <Show when={step() === 'setkey'}>
+        <Text>
+          The host shared {hostRecords.size}{' '}
+          identity{hostRecords.size === 1 ? '' : 'ies'} with you. Set a
+          passphrase for THIS device to protect your copy:
+        </Text>
         <form
           class="flex flex-col gap-2"
           onSubmit={(e) => {
             e.preventDefault()
-            void submitCode()
+            void finish()
           }}
         >
-          <Text>
-            Enter the recovery code from the other device (verified against the
-            host's envelope):
-          </Text>
           <Input
-            label="Recovery code"
-            value={code()}
-            onInput={(e) => setCode((e.target as HTMLInputElement).value)}
-            placeholder="recovery code"
+            label="This device's passphrase"
+            value={passphrase()}
+            onInput={(e) =>
+              setPassphrase((e.target as HTMLInputElement).value)
+            }
+            placeholder="a passphrase only this device uses"
             type="password"
-            autocomplete="current-password"
+            autocomplete="new-password"
             revealable
           />
-          <Button variant="primary" type="submit" disabled={code().length < 8}>
-            Unlock &amp; join
+          <Button
+            variant="primary"
+            type="submit"
+            disabled={passphrase().length < 8 || busy()}
+          >
+            {busy() ? 'Joining…' : 'Finish joining'}
           </Button>
         </form>
-      </Show>
-
-      <Show when={step() === 'enrolling'}>
-        <Text>Last step — enroll a passkey for this device:</Text>
-        <Button variant="primary" onClick={() => void enrollAndFinish()}>
-          {busy() ? 'Enrolling…' : 'Enroll passkey'}
-        </Button>
-      </Show>
-
-      <Show when={step() === 'adopting'}>
-        <Text>
-          Last step — confirm this device's passkey; your vault adopts the other
-          device's recovery code.
-        </Text>
-        <Button variant="primary" onClick={() => void adoptAndFinish()}>
-          {busy() ? 'Adopting…' : 'Adopt &amp; merge'}
-        </Button>
       </Show>
     </div>
   )

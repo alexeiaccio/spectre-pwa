@@ -2,9 +2,9 @@
 id: GS3
 title: Join flow
 type: task
-status: open
+status: closed
 blocked_by: [GS1, GS2]
-assigned:
+assigned: dev
 ---
 
 ## Question
@@ -57,3 +57,28 @@ envelope), feed K-holding into `JoinScreen` and consume `consentGroupJoin`
 instead of `reencryptUnderDekB`/`adoptHostCode` + `submitCode`, and wire the
 host's "Create invitation" to `createGroupInvitation` (GS2) with K generated at
 first setup. This is the vault-key migration; tracked here, not yet closed.
+
+## Resolution
+
+Closed 2026-08-18 (code complete; WebAuthn end-to-end is a manual/browser
+step — see Acceptance note).
+
+- **Vault session key = group key K** (extractable, per the GS3 decision):
+  `generateDek`/`unwrapDek`/`importGroupKey` now produce extractable keys;
+  `VaultService.exportGroupKey` returns raw K from the live session.
+- **`consentGroupJoin`** (records.ts): recover K from the invitation (no host
+  passphrase), read the offered identities, re-wrap K under the joiner's OWN
+  passphrase + passkey PRF (`GroupEnvelope`), adopt the offered records.
+- **`JoinScreen` reworked**: the recovery-code/submitCode step is gone. Flow:
+  invitation → join doc → host records → **"set this device's passphrase"** →
+  consent + adopt, then `joinImport` (group envelope + records under K + K).
+  Existing-vault path unlocks locally first and merges identities (union,
+  local wins on conflict) re-encrypted under K.
+- **Host `SettingsScreen` "Create invitation"** now calls `createGroupInvitation`
+  (GS2) with the host's exported K and a stable K-derived `groupId` — producing
+  real one-time invitations (not the old DEK-based `shareVaultDoc`).
+
+Acceptance: join reaches the identity list with **zero host-passphrase input**
+implemented; fresh + existing-vault merge paths covered by the `consentGroupJoin`
+unit test; the joiner's own passphrase/passkey unlocks (via its envelope wrap,
+tested). 114/114 green, tsc clean.

@@ -66,18 +66,15 @@ it). This effort is the app-side trust/schema/flow redesign on top.
   doc under K → one-time secret S), `rotateGroupInvitation` (fresh S renders the
   prior invitation non-reusable). Only chosen ids hit the doc; joiner recovers K
   from the invite. 4 tests; 113/113 green.
+- [GS3 · Join flow](tickets/GS3-join-flow.md) — closed: vault session key =
+  group key K (extractable, per decision), `exportGroupKey`, `consentGroupJoin`
+  (recover K from invitation, re-wrap under the joiner's own passphrase +
+  passkey, adopt/merge), JoinScreen reworked (no host-passphrase step), and the
+  host "Create invitation" produces GS2 invitations from K. WebAuthn
+  end-to-end remains a manual/browser validation. 114/114 green.
 
 ## Not yet specified
 
-- [GS1 · Group key + schema](tickets/GS1-group-key-schema.md) — open. K, its
-  per-device wraps, records-under-K, envelope v2, mirror migration, the
-  one-time join secret + rotation primitive.
-- [GS2 · Invitation handoff](tickets/GS2-invitation-handoff.md) — open (blocked
-  by GS1). Host writes a selected identity set to a fresh doc; invitation embeds
-  ticket + join secret; consume/rotate on first join.
-- [GS3 · Join flow](tickets/GS3-join-flow.md) — open (blocked by GS1, GS2).
-  Join via invitation with no host passphrase; enroll local passkey; adopt-as-
-  union; rework JoinScreen.
 - [GS4 · Identity picker on host](tickets/GS4-identity-picker.md) — open.
   Multi-select on the host before generating an invitation; only those
   identities are offered and later synced.
