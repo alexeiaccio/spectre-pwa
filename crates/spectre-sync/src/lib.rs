@@ -9,13 +9,14 @@
 //! (`prefix␀value`), avoiding the blobs content-read API which differs across
 //! iroh-blobs versions. Reconciliation/LWW semantics are iroh-docs' own.
 
-use iroh::{endpoint::presets, protocol::Router, Endpoint, SecretKey};
+use iroh::{endpoint::presets, protocol::Router, Endpoint, RelayMode, RelayUrl, SecretKey};
 use iroh_blobs::store::mem::MemStore;
 use iroh_blobs::BlobsProtocol;
 use iroh_docs::{Author, DocTicket, protocol::Docs, store::Query};
 use iroh_gossip::net::Gossip;
 use futures::StreamExt;
 use n0_watcher::Watcher;
+use std::str::FromStr;
 use wasm_bindgen::prelude::*;
 
 /// Node handle kept alive by the JS side.
@@ -50,18 +51,32 @@ impl SyncNode {
         Self::start_inner(Some(SecretKey::from_bytes(&key))).await
     }
 
+    /// The relay this node uses. Build-time configuration (W3's wasm surface:
+    /// a browser build can't read env at runtime): override with
+    /// `SPECTRE_RELAY_URL`, default to the self-hosted iroh-worker relay.
+    /// `RelayMode::Custom` makes tickets embed this relay URL and dials it
+    /// directly — no n0 DNS/pkarr discovery (which is CORS-broken for browser
+    /// publishes and adds a flaky HTTP hop to the engine's dial).
+    fn relay_mode() -> RelayMode {
+        let url = option_env!("SPECTRE_RELAY_URL")
+            .unwrap_or("https://relay0.iroh.accio.blue");
+        let relay = RelayUrl::from_str(url).expect("invalid SPECTRE_RELAY_URL");
+        RelayMode::custom([relay])
+    }
+
     async fn start_inner(secret_key: Option<SecretKey>) -> Result<SyncNode, JsError> {
-        let mut builder = Endpoint::builder(presets::N0)
+        let mut builder = Endpoint::builder(presets::Minimal)
             .alpns(vec![
                 iroh_blobs::ALPN.to_vec(),
                 iroh_gossip::ALPN.to_vec(),
                 iroh_docs::ALPN.to_vec(),
             ])
             // The n0 pkarr DNS server's CORS config rejects browser PUTs
-            // (no access-control-allow-headers), so the PkarrPublisher can
-            // never publish from wasm; the resolver adds a flaky HTTP hop to
-            // the engine's dial. Tickets carry relay addresses, which seed
-            // the endpoint's memory lookup — drop pkarr entirely (M10).
+            // (no access-control-allow-headers), so a PkarrPublisher can never
+            // publish from wasm; the resolver adds a flaky HTTP hop to the
+            // engine's dial. Tickets carry relay addresses, which seed the
+            // endpoint's memory lookup — drop pkarr entirely.
+            .relay_mode(Self::relay_mode())
             .clear_address_lookup();
         if let Some(sk) = secret_key {
             builder = builder.secret_key(sk);
