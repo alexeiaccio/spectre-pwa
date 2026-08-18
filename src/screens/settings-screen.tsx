@@ -1,4 +1,4 @@
-import { createEffect, createSignal, onCleanup, Show } from 'solid-js'
+import { createEffect, createMemo, createSignal, For, onCleanup, Show } from 'solid-js'
 import { Effect } from 'effect'
 import {
   Button,
@@ -11,6 +11,7 @@ import {
 import { useScreen } from '../lib/flow.ts'
 import { getSyncAdapter, persistDoc } from '../lib/sync/adapter.ts'
 import { createGroupInvitation } from '../lib/sync/invitation.ts'
+import type { Identity } from '../lib/vault/schema.ts'
 import { readMeta } from '../lib/vault/storage.ts'
 import { vaultImpl } from '../lib/vault/service.ts'
 
@@ -43,6 +44,37 @@ export default function SettingsScreen() {
   const [pairError, setPairError] = createSignal<string | null>(null)
   const [copied, setCopied] = createSignal(false)
   const [diag, setDiag] = createSignal<string[]>([])
+  // Identity ids chosen to share with an invitation. Initialized to "all" when
+  // the picker opens (unlock / identity-set change / hide re-opens the form);
+  // the user toggles individual ids off. GS4.
+  const [selected, setSelected] = createSignal<Set<string>>(new Set())
+
+  /** Identities available to share from the unlocked session (reactive; empty while locked). */
+  const shareableIdentities = createMemo<readonly Identity[]>(() => {
+    const s = api.vault.status()
+    return s.kind === 'unlocked' ? s.vault.identities : []
+  })
+
+  const resetSelection = (identities: readonly Identity[]): void => {
+    setSelected(new Set(identities.map((i) => i.id)))
+  }
+
+  // Default the picker to "all" whenever the unlocked identity set changes
+  // (unlock, join-import, save); the memo is cached between toggles, so manual
+  // selections are not clobbered while the user is picking.
+  // Solid 2 beta: createEffect requires the (compute, effect) two-arg form.
+  // Default the selection to all identities whenever the unlocked set changes.
+  createEffect(
+    () => shareableIdentities(),
+    (identities) => resetSelection(identities),
+  )
+
+  const toggleIdentity = (id: string): void => {
+    const next = new Set(selected())
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    setSelected(next)
+  }
 
   // While the invitation is shown, poll spike-style connection diagnostics
   // (relay / node / doc sync) so the host can see its sync state.
@@ -84,15 +116,21 @@ export default function SettingsScreen() {
       const meta = await Effect.runPromise(readMeta())
       if (!meta?.deviceId) throw new Error('no device identity')
       const groupId = await groupIdOf(new Uint8Array(raw))
-      const invitation = await createGroupInvitation({
+      // GS4: share only the identities the host selected in the picker;
+      // unselected identities never reach the invitation's doc.
+      const selectedIds = selected()
+      const identities = session.vault.identities.filter((i) =>
+        selectedIds.has(i.id),
+      )
+      const created = await createGroupInvitation({
         sync,
         groupId,
         deviceId: meta.deviceId,
-        identities: session.vault.identities,
+        identities,
         groupKeyRaw: new Uint8Array(raw),
         persist: (t, docId) => persistDoc(t, docId),
       })
-      setInvitation(invitation)
+      setInvitation(created)
     } catch (e) {
       setPairError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -166,9 +204,36 @@ export default function SettingsScreen() {
           pastes this invitation):
         </Hint>
         <Show when={!invitation()}>
+          <Show when={shareableIdentities().length > 0}>
+            <div class="flex flex-col gap-1 pt-1">
+              <Hint>Share which identities?</Hint>
+              <For each={shareableIdentities()}>
+                {(identity) => (
+                  <label class="flex cursor-pointer items-center gap-2 rounded border border-surface-700 bg-surface-800 px-3 py-2 text-sm text-slate-100">
+                    <input
+                      type="checkbox"
+                      class="h-4 w-4 shrink-0 accent-teal-spectre"
+                      checked={selected().has(identity.id)}
+                      onChange={() => toggleIdentity(identity.id)}
+                    />
+                    <span>{identity.fullName}</span>
+                  </label>
+                )}
+              </For>
+              <p
+                class={`text-xs ${
+                  selected().size === 0 ? 'text-red-400' : 'text-slate-500'
+                }`}
+              >
+                {selected().size === 0
+                  ? 'Select at least one identity to share'
+                  : `${selected().size} of ${shareableIdentities().length} selected`}
+              </p>
+            </div>
+          </Show>
           <Button
             variant="primary"
-            disabled={pairing()}
+            disabled={pairing() || selected().size === 0}
             onClick={() => void onCreateInvitation()}
           >
             {pairing() ? 'Creating…' : 'Create invitation'}
@@ -191,7 +256,11 @@ export default function SettingsScreen() {
             </Button>
             <button
               class="text-xs text-slate-500 underline hover:text-slate-300"
-              onClick={() => setInvitation('')}
+              onClick={() => {
+                setInvitation('')
+                // Re-opening the form re-initializes the picker to "all".
+                resetSelection(shareableIdentities())
+              }}
             >
               hide
             </button>

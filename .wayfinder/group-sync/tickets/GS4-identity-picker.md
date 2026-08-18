@@ -2,9 +2,9 @@
 id: GS4
 title: Identity picker on host
 type: task
-status: open
+status: closed
 blocked_by: []
-assigned:
+assigned: dev
 ---
 
 ## Question
@@ -27,3 +27,11 @@ sharing every identity.
   on the joining side or in the doc.
 - Selection is validated (≥1) and defaults sensibly (e.g. all, or a gentle
   first-selection prompt).
+
+## Resolution
+
+Closed 2026-08-18. `settings-screen.tsx`: identity multi-select (checkbox row
+per identity) before "Create invitation"; defaults to all, auto-hides when the
+vault locks; ≥1 required (button disabled at zero); `onCreateInvitation`
+passes only the selected subset to `createGroupInvitation` (unselected ids
+never reach the doc). Integrated: 120/120 green, tsc clean.

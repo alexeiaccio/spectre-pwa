@@ -6,6 +6,7 @@ import { useIdentitySession } from './lib/spectre/use-identity-session.ts'
 import type { SessionApi } from './lib/spectre/use-identity-session.ts'
 import { useInstallPrompt } from './lib/pwa.ts'
 import { clearClipboardTimer, useLockLifecycle } from './lib/lifecycle.ts'
+import { useSyncRunner } from './lib/sync/sync-runner.ts'
 import { FlowContext } from './lib/flow.ts'
 import type { FlowApi } from './lib/flow.ts'
 import type { UpdateApi } from './lib/update.ts'
@@ -75,6 +76,10 @@ export default function App(props: AppProps = {}) {
       vault.status().kind === 'unlocked' || session.status().kind === 'ready',
     () => vault.prefs().autoLockMinutes * 60_000,
   )
+
+  // GS5: periodic cross-device sync — app open, in-app timer, foreground and
+  // online triggers (skips while locked / before a doc is joined).
+  useSyncRunner()
 
   const api: FlowApi = {
     vault,

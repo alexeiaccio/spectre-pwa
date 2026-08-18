@@ -72,15 +72,16 @@ it). This effort is the app-side trust/schema/flow redesign on top.
   passkey, adopt/merge), JoinScreen reworked (no host-passphrase step), and the
   host "Create invitation" produces GS2 invitations from K. WebAuthn
   end-to-end remains a manual/browser validation. 114/114 green.
+- [GS4 · Identity picker on host](tickets/GS4-identity-picker.md) — closed:
+  settings identity multi-select; `onCreateInvitation` shares only the selected
+  subset. 120/120 green.
+- [GS5 · Periodic cross-device sync](tickets/GS5-periodic-sync.md) — closed:
+  `sync-runner.ts` (app-open + 30s timer + visibility + online triggers,
+  gated/single-flight) does inbound `syncNow` + outbound write-on-change under
+  K with a confirmed-push watermark; `sync-status.ts` (lastSyncedAt, pending,
+  relayReachable, syncing). 6 tests; 120/120 green.
 
 ## Not yet specified
-
-- [GS4 · Identity picker on host](tickets/GS4-identity-picker.md) — open.
-  Multi-select on the host before generating an invitation; only those
-  identities are offered and later synced.
-- [GS5 · Periodic cross-device sync](tickets/GS5-periodic-sync.md) — open
-  (blocked by GS1). Read/write all shared records under K on a timer /
-  open-app + visibility triggers; sync-status UX.
 - [GS6 · Revoke a device via key rotation](tickets/GS6-revoke-device.md) — open
   (blocked by GS1, GS5). Real "remove connection": rotate to a new group key
   epoch K′, re-encrypt all shared records, re-share K′ only to remaining

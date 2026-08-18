@@ -84,7 +84,7 @@ const mergeIncoming = async (
 }
 
 /** Keep the host pointer's identityIds current so inbound merges know the keys. */
-const updateHostPointer = async (
+export const updateHostPointer = async (
   sync: SyncAdapter,
   docId: string,
   deviceId: string,
@@ -121,15 +121,33 @@ export const pushSave = async (
     if (diff.changed.length === 0 && diff.removedIds.length === 0) return
     await pushChanges(sync, node.docId, meta.deviceId, session.dek, diff)
     await updateHostPointer(sync, node.docId, meta.deviceId, next)
+    // GS5 watermark: this vault state is now confirmed pushed, so the periodic
+    // runner's outbound flush sees no diff (write-on-change, no ping-pong).
+    lastPushed = next
   } catch {
     // best-effort: the mirror already has the change
   }
 }
 
 /**
- * The inbound half, fired when the app reaches the identities screen with a
- * persisted doc: poll the union of the host pointer's ids + local mirror ids
- * and re-read them into the mirror (LWW resolved by the doc).
+ * The last local vault state this device confirmed pushed to the doc
+ * (GS5 outbound watermark). In-memory only: null after a reload means the
+ * periodic runner's first flush re-pushes the whole vault, which is the
+ * reconciliation we want (offline edits made pre-reload reach the doc).
+ * `pushSave` advances it on success; the runner reads it to diff write-on-change.
+ */
+let lastPushed: Vault | null = null
+
+export const getLastPushed = (): Vault | null => lastPushed
+
+export const setLastPushed = (v: Vault | null): void => {
+  lastPushed = v
+}
+
+/**
+ * The inbound half: poll the union of the host pointer's ids + local mirror ids
+ * and re-read them into the mirror (LWW resolved by the doc). Fired on the
+ * identities screen and periodically by the GS5 runner.
  */
 export const syncNow = async (): Promise<void> => {
   if (!SYNC_EXPERIMENTAL) return
