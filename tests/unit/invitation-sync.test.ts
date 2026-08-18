@@ -7,7 +7,10 @@ import {
   encodeInvitation,
   rotateGroupInvitation,
 } from '../../src/lib/sync/invitation.ts'
-import { consentGroupJoin, decodeIdentityRecord } from '../../src/lib/sync/records.ts'
+import {
+  consentGroupJoin,
+  decodeIdentityRecord,
+} from '../../src/lib/sync/records.ts'
 import {
   generateGroupKey,
   importGroupKey,
@@ -218,7 +221,7 @@ test('consentGroupJoin: joiner recovers the group from the invitation with its O
   expect([...consent.records.keys()]).toEqual(['id-1', 'id-2'])
   expect(consent.envelope.groupId).toBe('g1')
   expect(consent.envelope.deviceId).toBe('joiner-1')
-  expect(consent.envelope.deks.map((d) => d.method).sort()).toEqual([
+  expect(consent.envelope.deks.map((d) => d.method).toSorted()).toEqual([
     'passkey',
     'recovery',
   ])
@@ -231,7 +234,6 @@ test('consentGroupJoin: joiner recovers the group from the invitation with its O
 
   // And the joiner can unlock later with its own passphrase: unwrap K from its
   // own envelope's recovery wrap and read the same record.
-  const rec = consent.envelope.deks.find((d) => d.method === 'recovery')!
   const kFromOwn = await run(
     unwrapGroupKeyLocal(
       consent.envelope,

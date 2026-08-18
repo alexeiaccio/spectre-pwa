@@ -101,5 +101,8 @@ function purposeOf(
       return { purpose: 'identification', context: null }
     case 'answer':
       return { purpose: 'recovery', context: answer ?? null }
+    default:
+      // Exhaustive over the Site purpose union; unreachable for valid records.
+      throw new Error('unknown site purpose')
   }
 }

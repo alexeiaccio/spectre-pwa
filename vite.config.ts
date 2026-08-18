@@ -12,6 +12,8 @@ import { execSync } from 'node:child_process'
  * (git short hash + local build time) so a stale installed PWA is easy to spot
  * and compare against the version served in a browser tab.
  */
+const pad = (n: number): string => String(n).padStart(2, '0')
+
 const appVersion = (): string => {
   let hash = 'nogit'
   try {
@@ -23,7 +25,6 @@ const appVersion = (): string => {
   } catch {
     /* not a git checkout — keep the fallback */
   }
-  const pad = (n: number): string => String(n).padStart(2, '0')
   const d = new Date()
   return `g${hash} ${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
@@ -38,8 +39,8 @@ export default defineConfig({
   build: {
     rollupOptions: {
       input: {
-        main: resolve(__dirname, 'index.html'),
-        spike: resolve(__dirname, 'spike.html'),
+        main: resolve(import.meta.dirname, 'index.html'),
+        spike: resolve(import.meta.dirname, 'spike.html'),
       },
     },
   },

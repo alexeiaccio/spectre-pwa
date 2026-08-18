@@ -89,5 +89,11 @@ export const deriveScreen = (
         redirect: { kind: 'redirect', to: '/', replace: true },
       }
     }
+    default:
+      // Exhaustive over VaultStatus; unreachable for valid states.
+      return {
+        screen: { view: 'error', message: 'unknown vault state' },
+        redirect: noRedirect,
+      }
   }
 }

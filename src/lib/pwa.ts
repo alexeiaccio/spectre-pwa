@@ -6,6 +6,10 @@ export interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>
 }
 
+/** Chrome/Edge-only event; narrowed by the `prompt` member. */
+const isBeforeInstallPrompt = (e: Event): e is BeforeInstallPromptEvent =>
+  'prompt' in e
+
 /**
  * PWA install prompt (Chrome/Edge). Fires only when installable and not yet
  * installed. Returns the current prompt (null after dismissed/installed) and an
@@ -17,7 +21,7 @@ export function useInstallPrompt() {
 
   const onBeforeInstall = (e: Event): void => {
     e.preventDefault()
-    setInstallPrompt(e as BeforeInstallPromptEvent)
+    if (isBeforeInstallPrompt(e)) setInstallPrompt(e)
   }
   window.addEventListener('beforeinstallprompt', onBeforeInstall)
   window.addEventListener('appinstalled', () => setInstallPrompt(null))

@@ -29,7 +29,10 @@ export function useScreen(): {
   ) => () => Extract<Screen, { view: V }> | undefined
   navigate: (to: string, opts?: { replace?: boolean }) => void
 } {
-  const api = useContext(FlowContext)!
+  const ctx = useContext(FlowContext)
+  if (!ctx)
+    throw new Error('FlowContext is missing — mount it above the router')
+  const api = ctx
   const location = useLocation()
   const navigate = useNavigate()
 
@@ -46,6 +49,7 @@ export function useScreen(): {
   )
   const screen = createMemo(() => derivation().screen)
   /** Boolean accessor variant for `Show when`: `when={isA('booting')()}`. */
+  /* oxlint-disable solid/reactivity */
   const isA =
     (v: Screen['view']): (() => boolean) =>
     () =>
@@ -60,7 +64,9 @@ export function useScreen(): {
     ): (() => Extract<Screen, { view: V }> | undefined) =>
     () => {
       const s = screen()
+      // eslint-disable-next-line typescript/no-unsafe-type-assertion
       return s.view === v ? (s as Extract<Screen, { view: V }>) : undefined
     }
+  /* oxlint-enable solid/reactivity */
   return { api, screen, isA, view, navigate }
 }

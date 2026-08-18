@@ -69,16 +69,23 @@ export const encodeRecordDoc = (record: SyncRecord): string => {
   })
 }
 
+/** Decode a base64 wire field; throw when the JSON field isn't a string. */
+const decodeBytesField = (x: unknown): ArrayBuffer => {
+  if (typeof x !== 'string')
+    throw new Error('record bytes field is not a string')
+  return toBuf(Schema.decodeSync(Bytes)(x))
+}
+
 export const decodeRecordDoc = (s: string): SyncRecord => {
-  const w = JSON.parse(s) as Record<string, unknown>
+  const w: Record<string, unknown> = JSON.parse(s)
   if (w.v === 2 && w.kind === 'tombstone') return { v: 2, kind: 'tombstone' }
   if (w.v === 2 && w.kind === 'record') {
     return {
       v: 2,
       kind: 'record',
-      writer: String(w.writer),
-      iv: toBuf(Schema.decodeSync(Bytes)(w.iv as string)),
-      ct: toBuf(Schema.decodeSync(Bytes)(w.ct as string)),
+      writer: typeof w.writer === 'string' ? w.writer : '',
+      iv: decodeBytesField(w.iv),
+      ct: decodeBytesField(w.ct),
     }
   }
   if (w.v === 1) {
@@ -86,8 +93,8 @@ export const decodeRecordDoc = (s: string): SyncRecord => {
       v: 2,
       kind: 'record',
       writer: '',
-      iv: toBuf(Schema.decodeSync(Bytes)(w.iv as string)),
-      ct: toBuf(Schema.decodeSync(Bytes)(w.ct as string)),
+      iv: decodeBytesField(w.iv),
+      ct: decodeBytesField(w.ct),
     }
   }
   throw new Error('unknown record format')

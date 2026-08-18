@@ -30,7 +30,7 @@ export default function LockedScreen() {
         <Input
           label="Recovery code"
           value={code()}
-          onInput={(e) => setCode((e.target as HTMLInputElement).value)}
+          onInput={(e) => setCode(e.currentTarget.value)}
           placeholder="recovery code"
           autocomplete="current-password"
         />

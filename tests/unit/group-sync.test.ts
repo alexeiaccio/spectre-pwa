@@ -66,7 +66,7 @@ test('group envelope round-trips through the JSON wire format (v2)', () => {
 
 test('devices with independent local unlocks unwrap the SAME group key and read each other\'s records', async () => {
   // Host A generates the group key K.
-  const { key: ka, raw } = await run(generateGroupKey())
+  const { raw } = await run(generateGroupKey())
 
   // A wraps K under its own passphrase + passkey PRF; B wraps the same K under
   // only its own passphrase. Two independent local unlocks, no shared code.

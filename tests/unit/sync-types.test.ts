@@ -14,6 +14,9 @@ import {
 const bytes = (n: number): ArrayBuffer =>
   crypto.getRandomValues(new Uint8Array(n)).buffer as ArrayBuffer
 
+const toB64 = (b: ArrayBuffer): string =>
+  btoa(String.fromCharCode(...new Uint8Array(b)))
+
 test('host doc round-trips through the JSON wire format', () => {
   const h: HostPointer = { deviceId: 'd1', identityIds: ['a', 'b'] }
   expect(decodeHostDoc(encodeHostDoc(h))).toEqual(h)
@@ -38,8 +41,6 @@ test('tombstone doc round-trips', () => {
 test('v1 legacy record doc decodes as a live record with an unknown writer', () => {
   const iv = bytes(12)
   const ct = bytes(16)
-  const toB64 = (b: ArrayBuffer): string =>
-    btoa(String.fromCharCode(...new Uint8Array(b)))
   const v1 = JSON.stringify({ v: 1, iv: toB64(iv), ct: toB64(ct) })
   const back = asRecord(decodeRecordDoc(v1))
   expect(back.writer).toBe('')

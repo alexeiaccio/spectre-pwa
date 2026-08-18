@@ -342,9 +342,7 @@ export default function IdentityScreen() {
               class="flex-1"
               label="Spectre passphrase"
               value={passphrase()}
-              onInput={(e) =>
-                setPassphrase((e.target as HTMLInputElement).value)
-              }
+              onInput={(e) => setPassphrase(e.currentTarget.value)}
               placeholder="Spectre passphrase"
               type="password"
               autocomplete="current-password"
@@ -368,7 +366,7 @@ export default function IdentityScreen() {
           <Show when={allSites().length > 0}>
             <Input
               value={query()}
-              onInput={(e) => setQuery((e.target as HTMLInputElement).value)}
+              onInput={(e) => setQuery(e.currentTarget.value)}
               placeholder="search sites"
               title="Search sites"
               class="mb-1"

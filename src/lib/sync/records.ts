@@ -95,8 +95,12 @@ export const decodeIdentityRecord = (
       new Uint8Array(record.iv),
       new Uint8Array(record.ct),
     )
-    return Schema.decodeSync(Schema.fromJsonString(IdentitySchema))(
+    return yield* Schema.decodeEffect(Schema.fromJsonString(IdentitySchema))(
       new TextDecoder().decode(pt),
+    ).pipe(
+      Effect.mapError(
+        () => new CryptoError({ message: 'identity record failed to decode' }),
+      ),
     )
   })
 

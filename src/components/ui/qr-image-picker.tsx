@@ -47,10 +47,7 @@ export function QrImagePicker(props: { onScan: (text: string) => void }) {
       try {
         const img = new Image()
         img.src = url
-        await new Promise((res, rej) => {
-          img.onload = res
-          img.onerror = rej
-        })
+        await img.decode()
         let text: string | null = null
         for (const scale of [1, 2, 3]) {
           const canvas = document.createElement('canvas')
@@ -87,7 +84,7 @@ export function QrImagePicker(props: { onScan: (text: string) => void }) {
         {busy() ? 'Reading image…' : 'Choose a QR image'}
       </Button>
       <input
-        ref={inputRef}
+        ref={(el) => (inputRef = el)}
         type="file"
         accept="image/*"
         class="sr-only"

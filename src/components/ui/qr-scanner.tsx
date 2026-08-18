@@ -59,8 +59,8 @@ export function QrScanner(props: {
   // (ref assigned during render), which also re-runs if the parent swaps props.
   createEffect(
     () => ({ video: video(), onScan: props.onScan, onError: props.onError }),
-    ({ video, onScan, onError }) => {
-      if (!video || started) return
+    ({ video: el, onScan, onError }) => {
+      if (!el || started) return
       started = true
 
       const start = async (): Promise<void> => {
@@ -87,16 +87,16 @@ export function QrScanner(props: {
           }
         }
         stream = s
-        video.srcObject = s
-        video.muted = true
-        video.setAttribute('playsinline', '')
+        el.srcObject = s
+        el.muted = true
+        el.setAttribute('playsinline', '')
         try {
-          await video.play()
+          await el.play()
         } catch {
           // Muted autoplay is allowed; a throw here is unusual — keep going.
         }
         const reader = new BrowserQRCodeReader()
-        controls = await reader.decodeFromStream(s, video, (result, err) => {
+        controls = await reader.decodeFromStream(s, el, (result, err) => {
           if (result) {
             stopCamera()
             onScan(result.getText())

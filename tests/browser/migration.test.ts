@@ -71,13 +71,13 @@ const seedV3Db = (): Promise<void> =>
         'id-1',
       )
       tx.objectStore('records').put({ v: 2, kind: 'tombstone' }, 'id-2')
-      tx.oncomplete = () => {
+      tx.addEventListener('complete', () => {
         db.close()
         resolve()
-      }
-      tx.onerror = () => reject(tx.error)
+      })
+      tx.addEventListener('error', () => reject(tx.error))
     }
-    req.onerror = () => reject(req.error)
+    req.addEventListener('error', () => reject(req.error))
   })
 
 const dbVersion = (): Promise<number> =>
@@ -89,7 +89,7 @@ const dbVersion = (): Promise<number> =>
       db.close()
       resolve(version)
     }
-    req.onerror = () => reject(req.error)
+    req.addEventListener('error', () => reject(req.error))
   })
 
 const dropDb = (): Promise<void> =>
@@ -127,7 +127,7 @@ test('v3 mirror (out-of-line keys) migrates to v4 and reads back intact', async 
 
   const records = await run(getAllRecords())
   const byId = new Map(records)
-  expect([...byId.keys()].sort()).toEqual(['id-1', 'id-2'])
+  expect([...byId.keys()].toSorted()).toEqual(['id-1', 'id-2'])
   const live = byId.get('id-1') as SyncRecord
   expect(live.kind).toBe('record')
   expect(live.writer).toBe('writer-a')

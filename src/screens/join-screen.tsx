@@ -361,7 +361,7 @@ export default function JoinScreen() {
           <Input
             label="Recovery code"
             value={localCode()}
-            onInput={(e) => setLocalCode((e.target as HTMLInputElement).value)}
+            onInput={(e) => setLocalCode(e.currentTarget.value)}
             placeholder="recovery code"
             type="password"
             autocomplete="current-password"
@@ -441,9 +441,7 @@ export default function JoinScreen() {
             <Textarea
               label="Invitation string"
               value={invitation()}
-              onInput={(e) =>
-                setInvitation((e.target as HTMLTextAreaElement).value)
-              }
+              onInput={(e) => setInvitation(e.currentTarget.value)}
               placeholder="invitation string"
             />
             <Button
@@ -492,9 +490,7 @@ export default function JoinScreen() {
           <Input
             label="This device's passphrase"
             value={passphrase()}
-            onInput={(e) =>
-              setPassphrase((e.target as HTMLInputElement).value)
-            }
+            onInput={(e) => setPassphrase(e.currentTarget.value)}
             placeholder="a passphrase only this device uses"
             type="password"
             autocomplete="new-password"

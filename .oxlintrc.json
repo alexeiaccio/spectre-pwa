@@ -18,7 +18,10 @@
     "solid/event-handlers": "warn",
     "solid/reactivity": "warn",
     "solid/no-unknown-namespaces": "off",
-    "eslint/no-underscore-dangle": ["warn", { "allow": ["_tag"] }],
+    "eslint/no-underscore-dangle": [
+      "warn",
+      { "allow": ["_tag", "__APP_VERSION__"] }
+    ],
     "import/no-unassigned-import": ["warn", { "allow": ["**/*.css"] }],
     /* Rules the Effect LSP ships off by default; the oxlint preset enables
        them, but they flag non-Effect code (UI event handlers, test scaffolding,

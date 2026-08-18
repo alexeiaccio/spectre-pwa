@@ -278,9 +278,7 @@ export default function SettingsScreen() {
           <Input
             label="Recovery code"
             value={reEnrollCode()}
-            onInput={(e) =>
-              setReEnrollCode((e.target as HTMLInputElement).value)
-            }
+            onInput={(e) => setReEnrollCode(e.currentTarget.value)}
             placeholder="recovery code"
             autocomplete="current-password"
           />

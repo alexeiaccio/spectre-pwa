@@ -109,7 +109,7 @@ export function SiteFields(props: {
         onInput={(e) =>
           props.setDraft((d) => ({
             ...d,
-            name: (e.target as HTMLInputElement).value,
+            name: e.currentTarget.value,
           }))
         }
         placeholder={props.namePlaceholder}
@@ -124,7 +124,7 @@ export function SiteFields(props: {
           onInput={(e) =>
             props.setDraft((d) => ({
               ...d,
-              answer: (e.target as HTMLInputElement).value,
+              answer: e.currentTarget.value,
             }))
           }
           placeholder="security question, e.g. childhood pet"

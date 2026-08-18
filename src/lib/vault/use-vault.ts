@@ -166,6 +166,7 @@ export function useVault() {
     })
 
   const save = (vault: Vault): Promise<boolean> =>
+    // eslint-disable-next-line solid/reactivity -- snapshot the pre-save status once
     withBusy(async () => {
       const s = status()
       const prev = s.kind === 'unlocked' ? s.vault : null

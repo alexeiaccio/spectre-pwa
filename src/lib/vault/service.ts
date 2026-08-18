@@ -465,7 +465,7 @@ const makeVaultImpl = (
       cur.vault.identities.map((i) => i.id),
       vault,
     )
-    yield* Ref.set(session, { ...cur, vault })
+    return yield* Ref.set(session, { ...cur, vault })
   }),
 
   joinImport: Effect.fn('VaultService.joinImport')(function* (joined: {

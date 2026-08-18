@@ -12,10 +12,10 @@ import {
   encodeIdentityRecord,
   unwrapRecoveryDek,
 } from '../../src/lib/sync/records.ts'
-import { decodeRecordDoc, encodeRecordDoc } from '../../src/lib/sync/types.ts'
+import { decodeRecordDoc } from '../../src/lib/sync/types.ts'
 import type { Identity, Vault } from '../../src/lib/vault/schema.ts'
 
-const run = <A, E>(e: Effect.Effect<A, E>): Promise<A> => Effect.runPromise(e)
+const toBuf = (u: Uint8Array): ArrayBuffer => u.slice().buffer
 
 const IDENTITY_A: Identity = {
   id: 'id-a',
@@ -137,7 +137,6 @@ test('adoptHostCode merges host + local identities under a rotated DEK wrapped b
     kekFromPrf(new TextEncoder().encode(HOST_CODE), hSalt),
   )
   const hWrapped = await Effect.runPromise(wrapDek(hostRaw, hKek))
-  const toBuf = (u: Uint8Array): ArrayBuffer => u.slice().buffer
   const hostEnvelope = {
     v: 1,
     deviceId: 'host-a',
@@ -200,8 +199,8 @@ test('adoptHostCode merges host + local identities under a rotated DEK wrapped b
     }),
   )
 
-  const ids = joined.identities.map((i) => i.id).sort()
-  expect(ids).toEqual(['both', 'local-only', 'host-only'].sort())
+  const ids = joined.identities.map((i) => i.id).toSorted()
+  expect(ids).toEqual(['both', 'local-only', 'host-only'].toSorted())
   // Conflict resolved to B's copy.
   const both = joined.identities.find((i) => i.id === 'both')!
   expect(both.fullName).toBe('Local B')
@@ -218,7 +217,7 @@ test('adoptHostCode merges host + local identities under a rotated DEK wrapped b
     )
     decrypted.push((JSON.parse(new TextDecoder().decode(pt)) as Identity).id)
   }
-  expect(decrypted.sort()).toEqual(ids)
+  expect(decrypted.toSorted()).toEqual(ids)
   // B's old code no longer unlocks the new envelope.
   await expect(
     Effect.runPromise(unwrapRecoveryDek(joined.envelope, 'b-olds-code-xxxxx')),

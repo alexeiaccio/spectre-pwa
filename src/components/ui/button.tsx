@@ -15,7 +15,7 @@ export function Button(props: {
   class?: string
   disabled?: boolean
   type?: 'button' | 'submit'
-  onClick?: JSX.EventHandlerUnion<HTMLButtonElement, MouseEvent>
+  onClick?: JSX.EventHandler<HTMLButtonElement, MouseEvent>
   children?: JSX.Element
 }) {
   const cls = () =>
@@ -25,7 +25,7 @@ export function Button(props: {
       type={props.type ?? 'button'}
       class={cls()}
       disabled={props.disabled}
-      onClick={props.onClick}
+      onClick={(e) => props.onClick?.(e)}
     >
       {props.children}
     </button>

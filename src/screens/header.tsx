@@ -27,7 +27,7 @@ export default function Header(props: {
         <Show when={props.updateAvailable()}>
           <button
             class="rounded border border-teal-spectre px-2 py-1 text-xs font-medium text-teal-spectre hover:text-slate-200"
-            onClick={props.onUpdate}
+            onClick={() => props.onUpdate()}
           >
             Update available
           </button>
@@ -35,14 +35,14 @@ export default function Header(props: {
         <Show when={props.installPrompt()}>
           <button
             class="rounded bg-teal-spectre px-2 py-1 text-xs font-medium text-black"
-            onClick={props.onInstall}
+            onClick={() => props.onInstall()}
           >
             Install
           </button>
         </Show>
         <button
           class="rounded border border-surface-700 px-2 py-1 text-xs text-slate-400 hover:text-slate-200"
-          onClick={props.onLock}
+          onClick={() => props.onLock()}
         >
           Lock
         </button>

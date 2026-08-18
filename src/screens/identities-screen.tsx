@@ -131,7 +131,7 @@ export default function IdentitiesScreen() {
                 onInput={(e) =>
                   setNewIdentity((n) => ({
                     ...n,
-                    fullName: (e.target as HTMLInputElement).value,
+                    fullName: e.currentTarget.value,
                   }))
                 }
                 placeholder="full name"
@@ -143,7 +143,7 @@ export default function IdentitiesScreen() {
                 onInput={(e) =>
                   setNewIdentity((n) => ({
                     ...n,
-                    passphrase: (e.target as HTMLInputElement).value,
+                    passphrase: e.currentTarget.value,
                   }))
                 }
                 placeholder="passphrase (min 8)"
