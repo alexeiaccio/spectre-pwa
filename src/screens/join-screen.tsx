@@ -271,7 +271,7 @@ export default function JoinScreen() {
         devicePrivatePkcs8: consent.devicePrivatePkcs8,
       })
       if (!result) setError('could not save the joined vault')
-      else navigate('/')
+      else navigate('/settings')
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
