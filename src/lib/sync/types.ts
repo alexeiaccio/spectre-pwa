@@ -182,8 +182,9 @@ const GroupEnvelopeDocSchema = Schema.Struct({
   groupId: Schema.String,
   deviceId: Schema.String,
   deks: Schema.Array(WrappedDeKSchema),
-  devicePublic: Bytes,
-  deviceSecret: Schema.Array(WrappedDeKSchema),
+  // devicePublic/deviceSecret are GS6 additions; pre-GS6 envelopes lack them.
+  devicePublic: Schema.optional(Bytes),
+  deviceSecret: Schema.optional(Schema.Array(WrappedDeKSchema)),
 })
 
 export const encodeGroupEnvelope = (env: GroupEnvelope): string =>
@@ -224,8 +225,8 @@ export const decodeGroupEnvelope = (s: string): GroupEnvelope => {
       iv: toBuf(d.iv),
       wrapped: toBuf(d.wrapped),
     })),
-    devicePublic: toBuf(w.devicePublic),
-    deviceSecret: w.deviceSecret.map((d) => ({
+    devicePublic: w.devicePublic ? toBuf(w.devicePublic) : new ArrayBuffer(0),
+    deviceSecret: (w.deviceSecret ?? []).map((d) => ({
       method: d.method,
       salt: toBuf(d.salt),
       prfSalt: d.prfSalt ? toBuf(d.prfSalt) : undefined,

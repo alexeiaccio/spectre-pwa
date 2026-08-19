@@ -120,8 +120,14 @@ export default function SettingsScreen() {
       for (const d of devices) {
         if (d.deviceId === deviceId) continue
         const envStr = await adapter.get(node.docId, envelopeKey(d.deviceId))
-        if (envStr)
+        if (!envStr) continue
+        try {
           remainingEnvelopes.set(d.deviceId, decodeGroupEnvelope(envStr))
+        } catch {
+          // Skip a remaining device whose envelope can't be decoded; it
+          // (legacy, no ECDH key) can't be rekeyed anyway, and one bad
+          // envelope must not abort the whole revocation.
+        }
       }
 
       const { records, rekeys, hostEnvelope } = await Effect.runPromise(

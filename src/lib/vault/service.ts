@@ -350,28 +350,29 @@ const makeVaultImpl = (
       return yield* new VaultUnlockedError({
         message: 'no envelope for device',
       })
-    const dek = yield* unwrapSessionDek({ kind: 'passkey' }, envelope)
-    const devicePrivatePkcs8 = yield* unwrapDevicePrivate(
-      { kind: 'passkey' },
-      envelope,
-    )
     const pRec = envelope.deks.find((d) => d.method === 'passkey')
-    let unlockSecret: Uint8Array | undefined
-    if (pRec?.prfSalt && pRec.credId) {
-      const secret = yield* getPrfOutput(
-        new Uint8Array(pRec.prfSalt),
-        pRec.credId,
-      )
-      unlockSecret = secret.prfOutput
-    }
+    if (!pRec?.prfSalt || !pRec.credId)
+      return yield* new VaultUnlockedError({
+        message: 'no passkey record — unlock with the recovery code or re-enroll',
+      })
+    // ONE passkey prompt; reuse the derived PRF for both the group key K and
+    // the device ECDH secret (G6 `getPrfOutput` calls = one dialogue, not two).
+    const { prfOutput } = yield* getPrfOutput(
+      new Uint8Array(pRec.prfSalt),
+      pRec.credId,
+    )
+    const dek = yield* unwrapWith(prfOutput, pRec)
+    const devicePrivatePkcs8 = envelope.deviceSecret?.length
+      ? yield* unwrapRawSecret(envelope.deviceSecret, 'passkey', prfOutput)
+      : undefined
     const vault = yield* loadVault(dek)
     yield* Ref.set(session, {
       dek,
       vault,
       devicePrivatePkcs8,
-      unlockSecret,
-      unlockSalt: pRec ? new Uint8Array(pRec.salt) : undefined,
-      unlockMethod: unlockSecret ? 'passkey' : undefined,
+      unlockSecret: prfOutput,
+      unlockSalt: new Uint8Array(pRec.salt),
+      unlockMethod: 'passkey',
     })
     return vault
   }),
