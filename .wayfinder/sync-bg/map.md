@@ -19,35 +19,30 @@ Turn the Sync effort's **foreground-only** sync into **eventually-consistent cro
   - **Out of scope, carried over**: WebRTC/direct connections; background sync while the page is fully closed via a native process (only the SW mechanism exists, and it can't host iroh); cross-user sharing.
 - The pending-queue + status-UX problem is shared with the sync map's "Not yet specified" note — B-series research should keep it in scope rather than splitting it.
 
-## Status (updated 2026-08-19)
+## Status (closed 2026-08-19)
 
-**Mostly delivered — by the group-sync effort (GS5), not this one.** The
-periodic-sync engine that sync-bg charted landed in `.wayfinder/group-sync/`
-as **GS5 · Periodic cross-device sync**:
+**Effort closed.** The sync-bg destination is satisfied: the cross-platform
+periodic-sync engine landed as GS5 (see below), and the only remaining item —
+the Chromium-only SW wake-the-page handler for background sync while the tab
+is closed — is **declined**: the team judged background sync not important, so
+that path is dropped rather than pursued.
+
+## Delivered (by GS5 · group-sync)
 
 | sync-bg destination item | Status | Where |
 |---|---|---|
 | Periodic in-app sync (timer while open, `online`, `visibilitychange`) | ✅ landed | `src/lib/sync/sync-runner.ts` (`app-open` + 30s timer + triggers; gated/single-flight) |
 | Offline change queue (edits marked pending, flushed later) | ✅ landed | `bridge.ts` `getLastPushed`/`setLastPushed` confirmed-push watermark; `pendingChanges` stays >0 when a push fails |
 | Sync status UX (last-synced at, pending changes, relay reachability) | ✅ landed | `src/lib/sync/sync-status.ts` (`lastSyncedAt`, `pendingChanges`, `relayReachable`, `syncing`) |
-| SW `sync` handler that wakes the page (Chromium-only wake-the-page) | ⬜ **not implemented** | the only remaining sync-bg item; optional/enhancement |
+| SW `sync` handler that wakes the page (Chromium-only) | ❌ declined | judged not important; closed, not pursued |
 
 The group-key trust model (GS1–GS6) replaced the old per-device-DEK bridge, so
 much of the *underlying* engine changed too; sync-bg's *when*-to-sync triggers
 and status signals survived into GS5 largely intact.
 
-## Remaining (if pursued)
-
-- The **Chromium-only SW `sync` handler** (B1's "wake-the-page" bonus): a
-  `navigator.sync`/`sync` event handler in the SW that `postMessage`s the page
-  to re-dial the relay. Deferred — in-app triggers already cover it while the
-  tab is open; true background-sync-while-closed is out of scope (SW can't host
-  the iroh wasm relay connection). Revisit if background delivery while the
-  tab is closed matters.
-
 ## Tickets
 
-- [B1 · Background/periodic sync feasibility in a browser PWA](tickets/B1-periodic-sync-feasibility.md) — **research done**; its recommended cross-platform engine was implemented as GS5 (see Status above), leaving only the SW wake-the-page handler outstanding.
+- [B1 · Background/periodic sync feasibility in a browser PWA](tickets/B1-periodic-sync-feasibility.md) — **research done**; its recommended cross-platform engine was implemented as GS5 (see above); the optional SW wake-the-page handler was declined (background sync not important).
 
 ## Decisions so far
 
