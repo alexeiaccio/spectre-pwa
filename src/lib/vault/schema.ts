@@ -89,13 +89,16 @@ export interface WrappedDeK {
 /** Non-secret header record → 1 row in the envelope store, key "root". */
 export interface Envelope {
   version: number
-  deks: readonly WrappedDeK[]
+  deks: readonly WrappedDeK[]  // wraps of the current group key K
   /** GS6: the trust-group id this device belongs to (v2 group envelope). */
   groupId?: string
   /** GS6: this device's ECDH public key (so the group can rekey to it). */
   devicePublic?: ArrayBuffer
   /** GS6: this device's ECDH private key, wrapped under its own unlock. */
   deviceSecret?: readonly WrappedDeK[]
+  /** Key-epoch resilience: wraps of the *previous* group key, kept briefly so a
+   * lagging mirror whose records are still under the old epoch can decrypt. */
+  previousDeks?: readonly WrappedDeK[]
 }
 
 /** The mirror's node identity (S6/M3): iroh SecretKey + the persisted vault doc. */

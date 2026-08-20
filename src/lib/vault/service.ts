@@ -216,27 +216,58 @@ const writeVault = Effect.fn('vault.writeVault')(function* (
 })
 
 /**
- * Load the vault from the mirror: decrypt each live record under K. A record
- * it can't decrypt (stale/cross-epoch, or a foreign record under an old key)
- * is skipped so a single bad record never bricks unlock — it just omits that
- * identity. (GS6 note: this is how a vault survives leftover records from an
- * old group key epoch or a legacy per-device-DEK write.)
+ * Derive the candidate group keys from an envelope (current deks + previous
+ * epoch deks kept for resilience) using the unlock secret. `loadVault` tries
+ * each so a record under an older epoch still decrypts.
+ */
+const envelopeKeys = Effect.fn('vault.envelopeKeys')(function* (
+  envelope: Envelope,
+  unlockSecret: Uint8Array,
+): Effect.fn.Return<AesKey[], VaultError> {
+  const keys: AesKey[] = []
+  const recs = [...envelope.deks, ...(envelope.previousDeks ?? [])]
+  for (const rec of recs) {
+    // The secret matches only records of its own method (passkey vs recovery);
+    // skip the ones it can't unwrap (those would be a different epoch/method).
+    const key = yield* unwrapWith(new Uint8Array(unlockSecret), rec).pipe(
+      Effect.matchEffect({
+        onSuccess: (k) => Effect.succeed(k as AesKey),
+        onFailure: () => Effect.succeed(null as AesKey | null),
+      }),
+    )
+    if (key) keys.push(key)
+  }
+  return keys
+})
+
+/**
+ * Load the vault from the mirror: decrypt each live record with any of the
+ * supplied candidate keys (current + previous group-key epochs). Keys that can't
+ * decrypt a given record are skipped; a record decryptable by no key (stale
+ * epoch / legacy foreign write) is omitted rather than bricking the vault.
  */
 const loadVault = Effect.fn('vault.loadVault')(function* (
-  dek: AesKey,
+  keys: readonly AesKey[],
 ): Effect.fn.Return<Vault, VaultError> {
   const records = yield* getAllRecords()
   const identities: Identity[] = []
   for (const [, record] of records) {
     if (record.kind === 'tombstone') continue
-    const identity = yield* decodeIdentityRecord(dek, record).pipe(
-      Effect.matchEffect({
-        onSuccess: (i) => Effect.succeed(i),
-        onFailure: () => Effect.succeed(null as Identity | null),
-      }),
-    )
+    let identity: Identity | null = null
+    for (const key of keys) {
+      const attempt = yield* decodeIdentityRecord(key, record).pipe(
+        Effect.matchEffect({
+          onSuccess: (i) => Effect.succeed(i as Identity),
+          onFailure: () => Effect.succeed(null as Identity | null),
+        }),
+      )
+      if (attempt) {
+        identity = attempt
+        break
+      }
+    }
     if (identity) identities.push(identity)
-    // else: skip undecryptable record (stale key/epoch) — don't brick unlock
+    // else: undecryptable by any known epoch key — skip, don't brick unlock
   }
   return { formatVersion: 1, identities }
 })
@@ -377,7 +408,9 @@ const makeVaultImpl = (
       envelope.deviceSecret?.some((d) => d.method === 'passkey')
         ? yield* unwrapRawSecret(envelope.deviceSecret, 'passkey', prfOutput)
         : undefined
-    const vault = yield* loadVault(dek)
+    const vault = yield* loadVault(
+      yield* envelopeKeys(envelope, prfOutput),
+    )
     yield* Ref.set(session, {
       dek,
       vault,
@@ -405,7 +438,9 @@ const makeVaultImpl = (
     )
     const rRec = envelope.deks.find((d) => d.method === 'recovery')
     const unlockSecret = textEncoder.encode(code)
-    const vault = yield* loadVault(dek)
+    const vault = yield* loadVault(
+      yield* envelopeKeys(envelope, unlockSecret),
+    )
     yield* Ref.set(session, {
       dek,
       vault,
@@ -493,7 +528,7 @@ const makeVaultImpl = (
     yield* writeRecords(joined.records)
     yield* writeMeta({ deviceId: joined.deviceId, isAdmin: false })
     // Load the joined identities back from the records (they are under K).
-    const loaded = yield* loadVault(joined.dek)
+    const loaded = yield* loadVault([joined.dek])
     yield* Ref.set(session, {
       dek: joined.dek,
       vault: loaded,
@@ -551,7 +586,13 @@ const makeVaultImpl = (
       iv: wrapped.iv.slice().buffer,
       wrapped: wrapped.wrapped.slice().buffer,
     }]
-    yield* writeDeviceEnvelope(meta.deviceId, { ...env, deks })
+    yield* writeDeviceEnvelope(meta.deviceId, {
+      ...env,
+      deks,
+      // Keep the old epoch's wraps so a mirror still holding old-K records can
+      // decrypt them (loadVault tries previousDeks too).
+      previousDeks: [...(env.previousDeks ?? []), ...env.deks],
+    })
     yield* writeVault(kpKey, meta.deviceId, cur.vault.identities.map((i) => i.id), cur.vault)
     yield* Ref.set(session, { ...cur, dek: kpKey })
     return { vault: cur.vault }
@@ -599,7 +640,13 @@ const makeVaultImpl = (
       iv: wrapped.iv.slice().buffer,
       wrapped: wrapped.wrapped.slice().buffer,
     }]
-    const hostEnvelope: Envelope = { ...env, deks: hostDeks }
+    const hostEnvelope: Envelope = {
+      ...env,
+      deks: hostDeks,
+      // Key-epoch resilience: keep the previous host key wraps so leftovers
+      // under the old epoch still decrypt after the rotation.
+      previousDeks: [...(env.previousDeks ?? []), ...env.deks],
+    }
     yield* writeDeviceEnvelope(meta.deviceId, hostEnvelope)
     const hostDocEnvelope: GroupEnvelope = {
       v: 2,

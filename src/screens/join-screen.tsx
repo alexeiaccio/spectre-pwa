@@ -36,9 +36,9 @@ import {
   envelopeKey,
   type SyncRecord,
 } from '../lib/sync/types.ts'
-import { createPasskeyWithPrf, isPrfUnavailable } from '../lib/vault/passkey.ts'
+import { readDeviceEnvelope, readMeta } from '../lib/vault/storage.ts'
+import { vaultImpl } from '../lib/vault/service.ts'
 import type { Identity } from '../lib/vault/schema.ts'
-
 type JoinStep = 'unlock' | 'invite' | 'syncing' | 'setkey'
 
 const toHex = (u: Uint8Array): string =>
@@ -175,28 +175,48 @@ export default function JoinScreen() {
     }
   }
 
-  // Finish the join: enter a per-device passphrase (own, not the host's),
-  // recover the group key from the invitation, adopt/merge the identities.
+  // Finish the join: requires an already-set-up, unlocked device (passkey
+  // created at setup). Reuses this device's existing passkey + device id — no
+  // new passkey is enrolled on join. Uses the entered per-device passphrase
+  // for the recovery wrap of the group key K.
   const finish = async (): Promise<void> => {
     if (!sync || !docId || !invitation().trim()) return
     setError(null)
     setBusy(true)
     try {
       const inv = decodeInvitation(invitation().trim())
-      let passkey: { prf?: Uint8Array; prfSalt?: Uint8Array; credId?: string } =
-        {}
-      const prfSalt = crypto.getRandomValues(new Uint8Array(32))
-      try {
-        const { credId, prfOutput } = await Effect.runPromise(
-          createPasskeyWithPrf(prfSalt),
+      // Joining needs the device to be set up + unlocked first (its passkey
+      // provides the passkey wrap of the group key; no new passkey here).
+      const session = await Effect.runPromise(vaultImpl.session())
+      if (!session)
+        throw new Error(
+          'unlock this device first (set up your passkey, then join)',
         )
-        passkey = { prf: prfOutput, prfSalt, credId }
-      } catch (e) {
-        // No PRF-capable authenticator — the per-device passphrase suffices
-        // (wraps K under the recovery method alone).
-        if (!isPrfUnavailable(e)) throw e
+      const meta = await Effect.runPromise(readMeta())
+      if (!meta?.deviceId) throw new Error('no device identity')
+      const envelope = await Effect.runPromise(
+        readDeviceEnvelope(meta.deviceId),
+      )
+      const pRec = envelope?.deks.find((d) => d.method === 'passkey')
+      let passkey: {
+        prf?: Uint8Array
+        prfSalt?: Uint8Array
+        credId?: string
+      } = {}
+      if (
+        session.unlockMethod === 'passkey' &&
+        session.unlockSecret &&
+        pRec?.prfSalt &&
+        pRec.credId
+      ) {
+        // Reuse this device's existing passkey to wrap the group key K.
+        passkey = {
+          prf: session.unlockSecret,
+          prfSalt: new Uint8Array(pRec.prfSalt),
+          credId: pRec.credId,
+        }
       }
-      const deviceId = crypto.randomUUID()
+      const deviceId = meta.deviceId
 
       const consent = await Effect.runPromise(
         consentGroupJoin({

@@ -419,6 +419,12 @@ export default function SettingsScreen() {
         </Show>
       </Card>
       <Card variant="dashed">
+        <Hint>Join a vault from another device (uses this device's existing passkey):</Hint>
+        <Button variant="primary" onClick={() => navigate('/join')}>
+          Join another device's vault
+        </Button>
+      </Card>
+      <Card variant="dashed">
         <Hint>Paired devices (settings — remove revokes access via key rotation):</Hint>
         <Show when={removeError()}>
           <p class="text-xs text-red-400">{removeError()}</p>

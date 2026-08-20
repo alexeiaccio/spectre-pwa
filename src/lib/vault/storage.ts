@@ -41,6 +41,7 @@ const EnvelopeSchema = Schema.Struct({
   groupId: Schema.optional(Schema.String),
   devicePublic: Schema.optional(Buf),
   deviceSecret: Schema.optional(Schema.Array(WrappedDeKSchema)),
+  previousDeks: Schema.optional(Schema.Array(WrappedDeKSchema)),
 })
 
 const PrefsSchema = Schema.Struct({
@@ -371,6 +372,7 @@ export const readDeviceEnvelope = Effect.fn('vault.storage.readDeviceEnvelope')(
           groupId: row.groupId,
           devicePublic: row.devicePublic,
           deviceSecret: row.deviceSecret,
+          previousDeks: row.previousDeks,
         }
       : undefined
   },
@@ -394,6 +396,7 @@ export const writeDeviceEnvelope = Effect.fn(
       groupId: envelope.groupId,
       devicePublic: envelope.devicePublic,
       deviceSecret: envelope.deviceSecret,
+      previousDeks: envelope.previousDeks,
     }),
   )
 })

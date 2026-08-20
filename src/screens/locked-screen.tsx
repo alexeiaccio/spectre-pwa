@@ -4,7 +4,7 @@ import { useScreen } from '../lib/flow.ts'
 
 /** `/locked` — vault locked. */
 export default function LockedScreen() {
-  const { api, navigate } = useScreen()
+  const { api } = useScreen()
   const [code, setCode] = createSignal('')
   const [reEnrollOpen, setReEnrollOpen] = createSignal(false)
   const err = (() => {
@@ -57,13 +57,6 @@ export default function LockedScreen() {
             a passkey.
           </Hint>
         </Show>
-        <button
-          class="text-xs text-slate-500 underline hover:text-slate-300"
-          type="button"
-          onClick={() => navigate('/join')}
-        >
-          I have a vault on another device — join it
-        </button>
       </form>
     </div>
   )
