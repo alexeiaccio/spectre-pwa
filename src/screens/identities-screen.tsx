@@ -1,4 +1,4 @@
-import { createEffect, createSignal, For } from 'solid-js'
+import { createEffect, createSignal, For, Show } from 'solid-js'
 import {
   Button,
   Disclosure,
@@ -37,6 +37,9 @@ export default function IdentitiesScreen() {
     fullName: string
     passphrase: string
   }>({ fullName: '', passphrase: '' })
+  // 3-step delete (GitHub-style): the id being confirmed + the typed name.
+  const [confirmDeleteId, setConfirmDeleteId] = createSignal<string | null>(null)
+  const [confirmName, setConfirmName] = createSignal('')
 
   // Inbound half of the bridge: re-read known keys into the mirror (experimental).
   createEffect(
@@ -50,8 +53,12 @@ export default function IdentitiesScreen() {
     const v = api.vaultValue()
     if (!v) return
     const next = deleteIdentity(v, identity.id)
-    const ok = await api.commitMutation(next)
-    if (ok) api.session.lock()
+    const area = await api.commitMutation(next)
+    if (area) {
+      api.session.lock()
+      setConfirmDeleteId(null)
+      setConfirmName('')
+    }
   }
 
   const onSaveIdentity = async (): Promise<void> => {
@@ -87,7 +94,8 @@ export default function IdentitiesScreen() {
       <div class="flex flex-col gap-2">
         <For each={api.vaultValue()?.identities ?? []}>
           {(identity) => (
-            <div class="flex items-stretch gap-1">
+            <>
+              <div class="flex items-stretch gap-1">
               <button
                 class="flex tap flex-1 items-center justify-between rounded border border-surface-700 bg-surface-800 px-3 py-2 text-left text-sm text-slate-100 hover:border-teal-spectre"
                 onClick={() => navigate(`/identity/${identity.id}`)}
@@ -105,11 +113,51 @@ export default function IdentitiesScreen() {
                 class="tap rounded border border-surface-700 bg-surface-800 px-2 text-sm text-slate-500 hover:border-red-900 hover:text-red-400"
                 type="button"
                 aria-label={`Delete identity ${identity.fullName}`}
-                onClick={() => void onDeleteIdentity(identity)}
+                onClick={() => {
+                  setConfirmDeleteId(identity.id)
+                  setConfirmName('')
+                }}
               >
                 ✕
               </button>
             </div>
+            <Show when={confirmDeleteId() === identity.id}>
+              <div class="flex flex-col gap-1 rounded border border-red-900/40 bg-surface-800 p-2">
+                <p class="text-xs text-slate-300">
+                  Delete “{identity.fullName}”? Type its name to confirm — this
+                  can’t be undone.
+                </p>
+                <Input
+                  value={confirmName()}
+                  onInput={(e) =>
+                    setConfirmName((e.target as HTMLInputElement).value)
+                  }
+                  placeholder={identity.fullName}
+                  aria-label={`Type ${identity.fullName} to confirm deletion`}
+                />
+                <div class="flex gap-2">
+                  <Button
+                    variant="primary"
+                    type="button"
+                    disabled={confirmName() !== identity.fullName}
+                    onClick={() => void onDeleteIdentity(identity)}
+                  >
+                    Delete identity
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    type="button"
+                    onClick={() => {
+                      setConfirmDeleteId(null)
+                      setConfirmName('')
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            </Show>
+            </>
           )}
         </For>
       </div>
