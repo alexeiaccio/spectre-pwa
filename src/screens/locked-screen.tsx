@@ -1,5 +1,5 @@
 import { createSignal, Show } from 'solid-js'
-import { Button, Hint, Input, Text } from '../components/ui/index.ts'
+import { Button, ErrorText, Hint, Input, Text } from '../components/ui/index.ts'
 import { useScreen } from '../lib/flow.ts'
 
 /** `/locked` — vault locked. */
@@ -7,8 +7,15 @@ export default function LockedScreen() {
   const { api, navigate } = useScreen()
   const [code, setCode] = createSignal('')
   const [reEnrollOpen, setReEnrollOpen] = createSignal(false)
+  const err = (() => {
+    const s = api.vault.status()
+    return s.kind === 'error' ? s.message : ''
+  })()
   return (
     <div data-screen="locked" class="flex flex-col gap-4">
+      <Show when={err.length > 0}>
+        <ErrorText>{err}</ErrorText>
+      </Show>
       <Show when={api.vault.hasPasskey()}>
         <Button variant="primary" onClick={() => void api.vault.unlock()}>
           Unlock with passkey

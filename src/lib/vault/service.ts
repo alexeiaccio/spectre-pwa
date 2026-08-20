@@ -216,9 +216,11 @@ const writeVault = Effect.fn('vault.writeVault')(function* (
 })
 
 /**
- * Load the vault from the mirror: decrypt each live record under the local DEK.
- * (Post-join the mirror's records are all under this device's DEK;
- * foreign-writer records from live sync are M8's lazy-decrypt path.)
+ * Load the vault from the mirror: decrypt each live record under K. A record
+ * it can't decrypt (stale/cross-epoch, or a foreign record under an old key)
+ * is skipped so a single bad record never bricks unlock — it just omits that
+ * identity. (GS6 note: this is how a vault survives leftover records from an
+ * old group key epoch or a legacy per-device-DEK write.)
  */
 const loadVault = Effect.fn('vault.loadVault')(function* (
   dek: AesKey,
@@ -227,8 +229,14 @@ const loadVault = Effect.fn('vault.loadVault')(function* (
   const identities: Identity[] = []
   for (const [, record] of records) {
     if (record.kind === 'tombstone') continue
-    const identity = yield* decodeIdentityRecord(dek, record)
-    identities.push(identity)
+    const identity = yield* decodeIdentityRecord(dek, record).pipe(
+      Effect.matchEffect({
+        onSuccess: (i) => Effect.succeed(i),
+        onFailure: () => Effect.succeed(null as Identity | null),
+      }),
+    )
+    if (identity) identities.push(identity)
+    // else: skip undecryptable record (stale key/epoch) — don't brick unlock
   }
   return { formatVersion: 1, identities }
 })
