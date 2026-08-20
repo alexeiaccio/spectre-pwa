@@ -124,6 +124,7 @@ export default function JoinScreen() {
       const deadline = Date.now() + 60_000
       let hostStr: string | null = null
       let lastPeers = ''
+      let probed = false
       while (Date.now() < deadline && !hostStr) {
         hostStr = await adapter.get(docId, HOST_KEY)
         if (hostStr) break
@@ -131,6 +132,23 @@ export default function JoinScreen() {
           lastPeers = await adapter.syncPeers(docId)
         } catch {
           lastPeers = ''
+        }
+        if (lastPeers && !probed) {
+          // Peer connected but the host's pre-existing HOST_KEY hasn't been
+          // pulled yet. Nudge a sync round with a harmless probe write — a
+          // fresh insert often triggers the engine to exchange the host's
+          // existing entries (this is the documented-good path). Others ignore
+          // `probe/` keys.
+          try {
+            await adapter.set(
+              docId,
+              `probe/${crypto.randomUUID()}`,
+              'join-probe',
+            )
+          } catch {
+            // best-effort nudge
+          }
+          probed = true
         }
         await sleep(lastPeers ? 1500 : 2000)
       }
