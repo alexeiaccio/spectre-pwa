@@ -123,12 +123,19 @@ export const runSyncPass = async (): Promise<SyncPassResult> => {
     let pushed = 0
     try {
       const meta = await run(readMeta())
-      if (pending > 0 && meta?.deviceId) {
+      if (meta?.deviceId) {
         const sync = getSyncAdapter()
         await sync.start()
-        await pushChanges(sync, node.docId, meta.deviceId, session.dek, diff)
-        await updateHostPointer(sync, node.docId, meta.deviceId, session.vault)
-        pushed = pending
+        if (pending > 0) {
+          await pushChanges(sync, node.docId, meta.deviceId, session.dek, diff)
+          pushed = pending
+        }
+        // The admin (host) refreshes HOST_KEY on every pass even when nothing
+        // changed: a fresh write is the reliably-delivered path, giving an
+        // in-flight joiner a current host pointer to pull.
+        if (meta.isAdmin !== false) {
+          await updateHostPointer(sync, node.docId, meta.deviceId, session.vault)
+        }
       }
     } catch {
       // Push failed (relay down / wasm error): pending stays > 0; next pass retries.
