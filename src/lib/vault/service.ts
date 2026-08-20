@@ -322,7 +322,7 @@ const makeVaultImpl = (
     )
     const deviceId = crypto.randomUUID()
     yield* writeDeviceEnvelope(deviceId, envelope)
-    yield* writeMeta({ deviceId })
+    yield* writeMeta({ deviceId, isAdmin: true })
     const vault: Vault = { formatVersion: 1, identities: [] }
     yield* Ref.set(session, { dek, vault, devicePrivatePkcs8 })
     const recoveryRecord = envelope.deks.find((d) => d.method === 'recovery')!
@@ -342,7 +342,7 @@ const makeVaultImpl = (
     )
     const deviceId = crypto.randomUUID()
     yield* writeDeviceEnvelope(deviceId, envelope)
-    yield* writeMeta({ deviceId })
+    yield* writeMeta({ deviceId, isAdmin: true })
     const vault: Vault = { formatVersion: 1, identities: [] }
     yield* Ref.set(session, { dek, vault, devicePrivatePkcs8 })
     return { identity: vault }
@@ -491,7 +491,7 @@ const makeVaultImpl = (
   }): Effect.fn.Return<{ vault: Vault }, VaultError> {
     yield* writeDeviceEnvelope(joined.deviceId, joined.envelope)
     yield* writeRecords(joined.records)
-    yield* writeMeta({ deviceId: joined.deviceId })
+    yield* writeMeta({ deviceId: joined.deviceId, isAdmin: false })
     // Load the joined identities back from the records (they are under K).
     const loaded = yield* loadVault(joined.dek)
     yield* Ref.set(session, {

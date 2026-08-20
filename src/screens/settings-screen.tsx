@@ -63,6 +63,7 @@ export default function SettingsScreen() {
   const [selected, setSelected] = createSignal<Set<string>>(new Set())
   // GS6: paired-device roster (excluding this device) + remove.
   const [paired, setPaired] = createSignal<GroupDevice[]>([])
+  const [admin, setAdmin] = createSignal(true) // only the admin device may revoke
   const [removeError, setRemoveError] = createSignal<string | null>(null)
   const [removing, setRemoving] = createSignal<string | null>(null)
 
@@ -74,6 +75,7 @@ export default function SettingsScreen() {
         return
       }
       const meta = await Effect.runPromise(readMeta())
+      setAdmin(meta?.isAdmin ?? true) // legacy hosts default to admin
       const adapter = getSyncAdapter()
       await adapter.start()
       const rosterStr = await adapter.get(node.docId, DEVICES_KEY)
@@ -218,15 +220,38 @@ export default function SettingsScreen() {
     },
   )
 
+  // Bound the whole create-invitation flow so a hanging relay (wasm ensure_online
+  // waiting for the WebSocket) surfaces an error instead of an eternal "Creating…".
+  const INVITE_TIMEOUT_MS = 45_000
+  const withInviteTimeout = <T,>(p: Promise<T>): Promise<T> =>
+    Promise.race([
+      p,
+      new Promise<never>((_, reject) =>
+        setTimeout(
+          () =>
+            reject(
+              new Error(
+                `timed out creating the invitation (${INVITE_TIMEOUT_MS}ms) — is the relay reachable?`,
+              ),
+            ),
+          INVITE_TIMEOUT_MS,
+        ),
+      ),
+    ])
+
   const onCreateInvitation = async (): Promise<void> => {
     setPairing(true)
     setPairError(null)
     try {
       const sync = getSyncAdapter()
-      const raw = await Effect.runPromise(vaultImpl.exportGroupKey())
-      const session = await Effect.runPromise(vaultImpl.session())
+      const raw = await withInviteTimeout(
+        Effect.runPromise(vaultImpl.exportGroupKey()),
+      )
+      const session = await withInviteTimeout(
+        Effect.runPromise(vaultImpl.session()),
+      )
       if (!session) throw new Error('vault locked')
-      const meta = await Effect.runPromise(readMeta())
+      const meta = await withInviteTimeout(Effect.runPromise(readMeta()))
       if (!meta?.deviceId) throw new Error('no device identity')
       const groupId = await groupIdOf(new Uint8Array(raw))
       // GS4: share only the identities the host selected in the picker;
@@ -235,14 +260,16 @@ export default function SettingsScreen() {
       const identities = session.vault.identities.filter((i) =>
         selectedIds.has(i.id),
       )
-      const created = await createGroupInvitation({
-        sync,
-        groupId,
-        deviceId: meta.deviceId,
-        identities,
-        groupKeyRaw: new Uint8Array(raw),
-        persist: (t, docId) => persistDoc(t, docId),
-      })
+      const created = await withInviteTimeout(
+        createGroupInvitation({
+          sync,
+          groupId,
+          deviceId: meta.deviceId,
+          identities,
+          groupKeyRaw: new Uint8Array(raw),
+          persist: (t, docId) => persistDoc(t, docId),
+        }),
+      )
       setInvitation(created)
     } catch (e) {
       setPairError(e instanceof Error ? e.message : String(e))
@@ -396,13 +423,15 @@ export default function SettingsScreen() {
                     <span class="text-sm text-slate-200">
                       {dev.deviceId.slice(0, 8)}…
                     </span>
-                    <Button
-                      variant="secondary"
-                      disabled={removing() !== null}
-                      onClick={() => void onRemoveDevice(dev.deviceId)}
-                    >
-                      {removing() === dev.deviceId ? 'Removing…' : 'Remove'}
-                    </Button>
+                    <Show when={admin()}>
+                      <Button
+                        variant="secondary"
+                        disabled={removing() !== null}
+                        onClick={() => void onRemoveDevice(dev.deviceId)}
+                      >
+                        {removing() === dev.deviceId ? 'Removing…' : 'Remove'}
+                      </Button>
+                    </Show>
                   </li>
                 )}
               </For>
@@ -411,6 +440,11 @@ export default function SettingsScreen() {
         >
           <p class="text-xs text-slate-400">
             No other paired devices yet.
+          </p>
+        </Show>
+        <Show when={!admin()}>
+          <p class="text-xs text-slate-500">
+            Only the device that created this vault can remove devices.
           </p>
         </Show>
       </Card>

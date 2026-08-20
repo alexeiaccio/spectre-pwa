@@ -60,6 +60,7 @@ const NodeSchema = Schema.Struct({
 const MetaSchema = Schema.Struct({
   key: Schema.Literal('state'),
   deviceId: Schema.String,
+  isAdmin: Schema.optional(Schema.Boolean),
 })
 
 /**
@@ -407,7 +408,7 @@ export const readMeta = Effect.fn('vault.storage.readMeta')(
       qb.from(META_STORE).select().equals('state'),
     )
     const row = rows[0]
-    return row ? { deviceId: row.deviceId } : undefined
+    return row ? { deviceId: row.deviceId, isAdmin: row.isAdmin } : undefined
   },
 )
 
@@ -419,7 +420,9 @@ export const writeMeta = Effect.fn('vault.storage.writeMeta')(function* (
   | IndexedDbDatabase.IndexedDbDatabaseError
 > {
   yield* withDb((qb) =>
-    qb.from(META_STORE).upsert({ key: 'state', deviceId: meta.deviceId }),
+    qb
+      .from(META_STORE)
+      .upsert({ key: 'state', deviceId: meta.deviceId, isAdmin: meta.isAdmin }),
   )
 })
 

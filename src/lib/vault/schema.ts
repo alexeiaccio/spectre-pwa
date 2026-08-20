@@ -109,6 +109,8 @@ export interface NodeIdentity {
 /** The mirror's meta state (M3): which device is "this device". */
 export interface MetaState {
   deviceId: string
+  /** GS6: the group-admin device (the one that set up the vault) may revoke others. */
+  isAdmin?: boolean
 }
 
 export interface Prefs {
