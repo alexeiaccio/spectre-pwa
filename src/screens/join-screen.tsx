@@ -1,5 +1,5 @@
 import { createEffect, createSignal, onCleanup, Show } from 'solid-js'
-import { Clock, Effect } from 'effect'
+import { Effect } from 'effect'
 import { useScreen } from '../lib/flow.ts'
 import {
   Accent,
@@ -43,28 +43,6 @@ type JoinStep = 'unlock' | 'invite' | 'syncing' | 'setkey'
 
 const toHex = (u: Uint8Array): string =>
   [...u].map((b) => b.toString(16).padStart(2, '0')).join('')
-
-/**
- * Poll `fn` until it returns a value, the Effect `Clock` passes the deadline,
- * or the polling interval elapses. Runs on Effect's clock so it is testable and
- * free of raw `Date.now`/`setTimeout` timers.
- */
-const waitForValue = (
-  fn: () => Promise<string | null>,
-  timeoutMs: number,
-  intervalMs = 1500,
-): Promise<string | null> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const end = (yield* Clock.currentTimeMillis) + timeoutMs
-      while (true) {
-        const v = yield* Effect.tryPromise(fn)
-        if (v) return v
-        if ((yield* Clock.currentTimeMillis) >= end) return null
-        yield* Effect.sleep(intervalMs)
-      }
-    }),
-  )
 
 export default function JoinScreen() {
   const { api, navigate } = useScreen()
@@ -139,16 +117,28 @@ export default function JoinScreen() {
       }
       await persistDoc(inv.ticket, joined.docId)
       docId = joined.docId
-      // Experimental sync may deliver slowly (or not at all) — poll with a
-      // generous window and surface the state rather than hard-failing.
-      const hostStr = await waitForValue(
-        () => adapter.get(docId, HOST_KEY),
-        45_000,
-      )
+      // Experimental sync can deliver slowly or not at all — poll, and track
+      // whether the host peer ever connects so the error tells us which.
+      const sleep = (ms: number): Promise<void> =>
+        new Promise((r) => window.setTimeout(r, ms))
+      const deadline = Date.now() + 60_000
+      let hostStr: string | null = null
+      let lastPeers = ''
+      while (Date.now() < deadline && !hostStr) {
+        hostStr = await adapter.get(docId, HOST_KEY)
+        if (hostStr) break
+        try {
+          lastPeers = await adapter.syncPeers(docId)
+        } catch {
+          lastPeers = ''
+        }
+        await sleep(lastPeers ? 1500 : 2000)
+      }
       if (!hostStr)
         throw new SyncUnavailableError({
-          message:
-            'no data from the host yet — is the other device online and did it share an invitation? (experimental sync)',
+          message: lastPeers
+            ? `host pointer not received within 60s (peer connected: ${lastPeers.slice(0, 12)}…) — retry`
+            : 'no data from the host — the peer never connected. Is the other device online and did it stay on the invitation screen?',
         })
       const host = decodeHostDoc(hostStr)
       for (const id of host.identityIds) {
