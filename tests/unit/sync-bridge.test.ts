@@ -57,6 +57,7 @@ class MemoryAdapter implements SyncAdapter {
   docIdFromTicket(): string {
     return 'doc'
   }
+  async reopen(): Promise<void> {}
   async subscribe(): Promise<void> {}
   async get(_docId: string, key: string): Promise<string | null> {
     return this.store.get(key) ?? null

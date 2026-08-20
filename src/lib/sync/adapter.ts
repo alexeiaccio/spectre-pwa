@@ -37,6 +37,13 @@ export interface SyncAdapter {
   joinDoc(ticket: string): Promise<{ docId: string }>
   /** Read the doc id out of a ticket without importing or dialing. */
   docIdFromTicket(ticket: string): string
+  /**
+   * Re-open a persisted doc (from a ticket) in a fresh node after reload.
+   * Docs are memory-only in wasm, so a reloaded node must re-import the doc
+   * from its ticket before `get`/`set`/`subscribe` can work. Cheap (~one
+   * import + start_sync), unlike `joinDoc`'s retry loop.
+   */
+  reopen(ticket: string): Promise<void>
   subscribe(docId: string, handlers: SyncSubscribeHandlers): Promise<void>
   get(docId: string, key: string): Promise<string | null>
   set(docId: string, key: string, value: string): Promise<void>
@@ -104,6 +111,10 @@ function createWasmSyncAdapter(): SyncAdapter {
       if (!node) throw new SyncUnavailableError({ message: 'node not started' })
       return node.doc_id_from_ticket(ticket)
     },
+    reopen: async (ticket) => {
+      const n = await ensure()
+      await n.import_ticket(ticket)
+    },
     subscribe: async (docId, handlers) => {
       const n = await ensure()
       await n.subscribe(docId, (v: unknown) => {
@@ -162,4 +173,20 @@ export const persistDoc = async (
   await Effect.runPromise(
     writeNodeIdentity({ ...node, docTicket: ticket, docId }),
   )
+}
+
+/**
+ * Re-open the persisted vault doc in the (possibly fresh) node before reading.
+ * iroh docs are memory-only in wasm, so after a reload the node holds the
+ * SecretKey but not the open doc — `get`/`set`/`subscribe` would hit "doc not
+ * open". Re-import from the persisted ticket (cheap, unlike joinDoc's retry
+ * loop) so roster/sync/etc. work after reload. Best-effort.
+ */
+export const reopenPersistedDoc = async (): Promise<void> => {
+  try {
+    const node = await Effect.runPromise(readNodeIdentity())
+    if (node?.docTicket) await getSyncAdapter().reopen(node.docTicket)
+  } catch {
+    // best-effort: doc-dependent reads simply no-op if it can't be reopened
+  }
 }

@@ -9,7 +9,7 @@ import {
   Select,
 } from '../components/ui/index.ts'
 import { useScreen } from '../lib/flow.ts'
-import { getSyncAdapter, persistDoc } from '../lib/sync/adapter.ts'
+import { getSyncAdapter, persistDoc, reopenPersistedDoc } from '../lib/sync/adapter.ts'
 import { createGroupInvitation } from '../lib/sync/invitation.ts'
 import type { Identity } from '../lib/vault/schema.ts'
 import { readMeta, readNodeIdentity } from '../lib/vault/storage.ts'
@@ -78,6 +78,7 @@ export default function SettingsScreen() {
       setAdmin(meta?.isAdmin ?? true) // legacy hosts default to admin
       const adapter = getSyncAdapter()
       await adapter.start()
+      await reopenPersistedDoc() // ensure the doc is open after a reload
       const rosterStr = await adapter.get(node.docId, DEVICES_KEY)
       if (!rosterStr) {
         setPaired([])

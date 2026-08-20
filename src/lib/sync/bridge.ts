@@ -1,5 +1,5 @@
 import { Effect } from 'effect'
-import { getSyncAdapter, SYNC_EXPERIMENTAL } from './adapter.ts'
+import { getSyncAdapter, SYNC_EXPERIMENTAL, reopenPersistedDoc } from './adapter.ts'
 import type { SyncAdapter } from './adapter.ts'
 import { encodeIdentityRecord } from './records.ts'
 import {
@@ -156,6 +156,7 @@ export const syncNow = async (): Promise<void> => {
     if (!node?.docId) return
     const sync = getSyncAdapter()
     await sync.start()
+    await reopenPersistedDoc() // ensure the doc is open after a reload
     const hostStr = await sync.get(node.docId, HOST_KEY)
     const hostIds = hostStr ? decodeHostDoc(hostStr).identityIds : []
     const localIds = (await run(getAllRecords())).map(([id]) => id)

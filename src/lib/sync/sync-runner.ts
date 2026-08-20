@@ -1,6 +1,6 @@
 import { createEffect, onCleanup } from 'solid-js'
 import { Effect } from 'effect'
-import { getSyncAdapter, SYNC_EXPERIMENTAL } from './adapter.ts'
+import { getSyncAdapter, SYNC_EXPERIMENTAL, reopenPersistedDoc } from './adapter.ts'
 import {
   diffVault,
   getLastPushed,
@@ -92,6 +92,10 @@ export const runSyncPass = async (): Promise<SyncPassResult> => {
       updateSyncStatus({ syncing: false })
       return noop(syncStatus().pendingChanges)
     }
+
+    // Re-open the persisted doc in this node (after reload it is memory-only
+    // and not open), so roster reads / consults and sync can reach it.
+    await reopenPersistedDoc()
 
     // GS6: consume a pending rekey for this device (switch to the new group
     // key epoch K′) BEFORE the inbound/outbound passes, so they use K′.
