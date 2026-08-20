@@ -7,7 +7,14 @@ import {
   wrapGroupKeyUnderShare,
 } from './group.ts'
 import { encodeIdentityRecord } from './records.ts'
-import { HOST_KEY, encodeHostDoc, encodeRecordDoc, type HostPointer } from './types.ts'
+import {
+  DEVICES_KEY,
+  encodeDeviceList,
+  HOST_KEY,
+  encodeHostDoc,
+  encodeRecordDoc,
+  type HostPointer,
+} from './types.ts'
 import type { Identity } from '../vault/schema.ts'
 
 // GS2: the invitation handoff. The host writes a *chosen* identity set into a
@@ -73,8 +80,10 @@ export const createGroupInvitation = async (args: {
   groupKeyRaw: Uint8Array
   /** Optional doc-capability persistence (wired by the real flow; a no-op by default). */
   persist?: (ticket: string, docId: string) => Promise<void>
+  /** Optional: this (host) device's ECDH public key hex, registered in the roster. */
+  hostPublicHex?: string
 }): Promise<string> => {
-  const { sync, groupId, deviceId, identities, groupKeyRaw, persist } = args
+  const { sync, groupId, deviceId, identities, groupKeyRaw, persist, hostPublicHex } = args
   if (identities.length === 0)
     throw new SyncUnavailableError({ message: 'no identities selected to share' })
   const k = await Effect.runPromise(importGroupKey(new Uint8Array(groupKeyRaw)))
@@ -92,6 +101,18 @@ export const createGroupInvitation = async (args: {
   const share = await Effect.runPromise(
     wrapGroupKeyUnderShare(new Uint8Array(groupKeyRaw), secret),
   )
+
+  // Register the host in the doc's device roster so other devices can see it
+  // (joiners already append themselves). Without this, joiners would never see
+  // the host in "Paired devices".
+  if (hostPublicHex) {
+    await sync.set(
+      doc.docId,
+      DEVICES_KEY,
+      encodeDeviceList({ v: 1, devices: [{ deviceId, publicHex: hostPublicHex }] }),
+    )
+  }
+
   const inv: Invitation = {
     v: 1,
     ticket: doc.ticket,

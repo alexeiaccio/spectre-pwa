@@ -12,7 +12,7 @@ import { useScreen } from '../lib/flow.ts'
 import { getSyncAdapter, persistDoc, reopenPersistedDoc } from '../lib/sync/adapter.ts'
 import { createGroupInvitation } from '../lib/sync/invitation.ts'
 import type { Identity } from '../lib/vault/schema.ts'
-import { readMeta, readNodeIdentity } from '../lib/vault/storage.ts'
+import { readDeviceEnvelope, readMeta, readNodeIdentity } from '../lib/vault/storage.ts'
 import { vaultImpl } from '../lib/vault/service.ts'
 import {
   DEVICES_KEY,
@@ -47,6 +47,9 @@ const groupIdOf = async (rawK: Uint8Array): Promise<string> => {
   const bytes = new Uint8Array(digest).slice(0, 16)
   return [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('')
 }
+
+const toHex = (u: Uint8Array): string =>
+  [...u].map((b) => b.toString(16).padStart(2, '0')).join('')
 
 /** `/settings` — vault settings: re-enroll, auto-lock, sync/pairing. */
 export default function SettingsScreen() {
@@ -261,6 +264,11 @@ export default function SettingsScreen() {
       const identities = session.vault.identities.filter((i) =>
         selectedIds.has(i.id),
       )
+      // The host registers itself in the roster so other devices can see it.
+      const hostEnv = await Effect.runPromise(readDeviceEnvelope(meta.deviceId))
+      const hostPublicHex = hostEnv?.devicePublic
+        ? toHex(new Uint8Array(hostEnv.devicePublic))
+        : undefined
       const created = await withInviteTimeout(
         createGroupInvitation({
           sync,
@@ -269,6 +277,7 @@ export default function SettingsScreen() {
           identities,
           groupKeyRaw: new Uint8Array(raw),
           persist: (t, docId) => persistDoc(t, docId),
+          hostPublicHex,
         }),
       )
       setInvitation(created)
