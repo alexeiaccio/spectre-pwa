@@ -1,4 +1,4 @@
-import { createEffect, createSignal, For, Show } from 'solid-js'
+import { createEffect, createSignal, For } from 'solid-js'
 import {
   Button,
   Disclosure,
@@ -162,14 +162,12 @@ export default function IdentitiesScreen() {
           </Button>
         </form>
       </Disclosure>
-      <Show when={count() > 0}>
-        <button
-          class="self-start text-xs text-slate-500 underline hover:text-slate-300"
-          onClick={() => navigate('/settings')}
-        >
-          ⚙ Settings
-        </button>
-      </Show>
+      <button
+        class="self-start text-xs text-slate-500 underline hover:text-slate-300"
+        onClick={() => navigate('/settings')}
+      >
+        ⚙ Settings
+      </button>
     </div>
   )
 }
