@@ -362,9 +362,13 @@ const makeVaultImpl = (
       pRec.credId,
     )
     const dek = yield* unwrapWith(prfOutput, pRec)
-    const devicePrivatePkcs8 = envelope.deviceSecret?.length
-      ? yield* unwrapRawSecret(envelope.deviceSecret, 'passkey', prfOutput)
-      : undefined
+    // Graceful like the pre-regression path: only unwrap the device secret if
+    // it actually has a passkey wrap (its only key material was minted
+    // passkey+recovery, but recovery-only / legacy envelopes may lack one).
+    const devicePrivatePkcs8 =
+      envelope.deviceSecret?.some((d) => d.method === 'passkey')
+        ? yield* unwrapRawSecret(envelope.deviceSecret, 'passkey', prfOutput)
+        : undefined
     const vault = yield* loadVault(dek)
     yield* Ref.set(session, {
       dek,
